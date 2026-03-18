@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api import groups, plans, preferences
+from src.api import calendar, groups, plans, preferences
 
 app = FastAPI(
     title="Outing Planner API",
@@ -24,6 +24,7 @@ app.add_middleware(
 app.include_router(plans.router, prefix="/api/plans", tags=["plans"])
 app.include_router(groups.router, prefix="/api/groups", tags=["groups"])
 app.include_router(preferences.router, prefix="/api/preferences", tags=["preferences"])
+app.include_router(calendar.router, prefix="/api/calendar", tags=["calendar"])
 
 
 @app.get("/")
