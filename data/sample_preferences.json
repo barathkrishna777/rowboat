@@ -1,0 +1,44 @@
+[
+  {
+    "user_id": "user-001",
+    "name": "Anushree",
+    "preferences": {
+      "cuisine_preferences": ["italian", "indian", "thai"],
+      "activity_preferences": ["escape_room", "museum", "concert"],
+      "dietary_restrictions": ["vegetarian"],
+      "budget_max": "$$",
+      "dealbreakers": ["no loud bars"],
+      "preferred_neighborhoods": ["Oakland", "Shadyside"],
+      "group_size_comfort": [3, 8],
+      "accessibility_needs": []
+    }
+  },
+  {
+    "user_id": "user-002",
+    "name": "Naitik",
+    "preferences": {
+      "cuisine_preferences": ["japanese", "mexican", "italian"],
+      "activity_preferences": ["bowling", "karaoke", "comedy_show"],
+      "dietary_restrictions": [],
+      "budget_max": "$$$",
+      "dealbreakers": [],
+      "preferred_neighborhoods": ["Squirrel Hill", "Shadyside"],
+      "group_size_comfort": [2, 10],
+      "accessibility_needs": []
+    }
+  },
+  {
+    "user_id": "user-003",
+    "name": "Barath",
+    "preferences": {
+      "cuisine_preferences": ["indian", "chinese", "american"],
+      "activity_preferences": ["bowling", "arcade", "sports_event"],
+      "dietary_restrictions": ["halal"],
+      "budget_max": "$$",
+      "dealbreakers": ["must have parking"],
+      "preferred_neighborhoods": ["Oakland", "Downtown"],
+      "group_size_comfort": [3, 6],
+      "accessibility_needs": []
+    }
+  }
+]

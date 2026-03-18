@@ -1,0 +1,57 @@
+[
+  {
+    "id": "yelp-mock-001",
+    "source": "yelp",
+    "source_id": "mock-001",
+    "name": "Pasta Prima",
+    "category": "restaurant",
+    "categories": ["Italian", "Pasta"],
+    "address": "5432 Walnut St, Pittsburgh, PA 15232",
+    "city": "Pittsburgh",
+    "lat": 40.4512,
+    "lng": -79.9339,
+    "price_tier": "$$",
+    "rating": 4.5,
+    "review_count": 312,
+    "dietary_options": ["vegetarian", "gluten_free"],
+    "url": "https://example.com/pasta-prima"
+  },
+  {
+    "id": "yelp-mock-002",
+    "source": "yelp",
+    "source_id": "mock-002",
+    "name": "Zone 28",
+    "category": "activity",
+    "categories": ["Bowling", "Arcade", "Laser Tag"],
+    "address": "100 Robinson Centre Dr, Pittsburgh, PA 15205",
+    "city": "Pittsburgh",
+    "lat": 40.4556,
+    "lng": -80.1123,
+    "price_tier": "$",
+    "rating": 3.8,
+    "review_count": 198,
+    "url": "https://example.com/zone28"
+  },
+  {
+    "id": "ticketmaster-mock-001",
+    "source": "ticketmaster",
+    "source_id": "mock-tm-001",
+    "name": "Pittsburgh Symphony Orchestra",
+    "category": "concert",
+    "categories": ["Music"],
+    "address": "600 Penn Ave, Pittsburgh, PA 15222",
+    "city": "Pittsburgh",
+    "lat": 40.4434,
+    "lng": -79.9979,
+    "rating": 4.7,
+    "review_count": 520,
+    "url": "https://example.com/pso",
+    "raw_details": {
+      "date": "2026-04-15",
+      "time": "19:30",
+      "price_min": 35,
+      "price_max": 120,
+      "genre": "Music"
+    }
+  }
+]
