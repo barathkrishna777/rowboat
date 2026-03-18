@@ -13,6 +13,7 @@ class VenueSource(str, Enum):
     YELP = "yelp"
     EVENTBRITE = "eventbrite"
     TICKETMASTER = "ticketmaster"
+    GOOGLE = "google"
     MANUAL = "manual"
 
 

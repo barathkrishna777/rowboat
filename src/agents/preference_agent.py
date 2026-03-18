@@ -47,11 +47,7 @@ class PreferenceDeps:
     quiz_state: QuizState | None = None
 
 
-preference_agent = Agent(
-    settings.primary_model,
-    result_type=PreferenceExtractionResult,
-    deps_type=PreferenceDeps,
-    system_prompt="""\
+SYSTEM_PROMPT = """\
 You are a friendly preference quiz conductor for a group outing planner.
 Your job is to learn a user's preferences for group activities through conversation.
 
@@ -72,12 +68,12 @@ Be conversational and adaptive:
 - Prioritize the most impactful questions first (dietary, budget, dealbreakers)
 
 Use the tools to generate questions and extract preferences from the conversation.
-""",
-)
+"""
 
 
-@preference_agent.tool
-async def generate_next_question(
+# ── Standalone tool functions (registered on lazy agent) ───────────────
+
+async def _generate_next_question(
     ctx: RunContext[PreferenceDeps],
     category: str,
     context: str = "",
@@ -144,8 +140,7 @@ async def generate_next_question(
     ).model_dump()
 
 
-@preference_agent.tool
-async def extract_preferences_from_answers(
+async def _extract_preferences_from_answers(
     ctx: RunContext[PreferenceDeps],
     cuisine_preferences: list[str],
     activity_preferences: list[str],
@@ -205,6 +200,26 @@ async def extract_preferences_from_answers(
     return prefs.model_dump()
 
 
+# ── Lazy agent initialization ─────────────────────────────────────────
+
+_preference_agent: Agent | None = None
+
+
+def get_preference_agent() -> Agent:
+    """Lazy-initialize the preference agent (defers API key validation)."""
+    global _preference_agent
+    if _preference_agent is None:
+        _preference_agent = Agent(
+            settings.primary_model,
+            output_type=PreferenceExtractionResult,
+            deps_type=PreferenceDeps,
+            system_prompt=SYSTEM_PROMPT,
+        )
+        _preference_agent.tool(_generate_next_question)
+        _preference_agent.tool(_extract_preferences_from_answers)
+    return _preference_agent
+
+
 async def run_preference_quiz(user_id: str, answers_text: str) -> PreferenceExtractionResult:
     """Run the preference agent to extract preferences from free-text answers.
 
@@ -213,6 +228,7 @@ async def run_preference_quiz(user_id: str, answers_text: str) -> PreferenceExtr
         answers_text: Free-text description of the user's preferences,
                       or structured answers from the quiz UI.
     """
+    agent = get_preference_agent()
     deps = PreferenceDeps(user_id=user_id)
     prompt = (
         f"The user (ID: {user_id}) has provided the following information about their preferences:\n\n"
@@ -220,5 +236,5 @@ async def run_preference_quiz(user_id: str, answers_text: str) -> PreferenceExtr
         "Please extract their structured preferences using the extract_preferences_from_answers tool. "
         "If any information is missing, note it in missing_areas."
     )
-    result = await preference_agent.run(prompt, deps=deps)
-    return result.data
+    result = await agent.run(prompt, deps=deps)
+    return result.output

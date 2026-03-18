@@ -87,6 +87,9 @@ async def search_yelp(
     Returns:
         List of Venue objects.
     """
+    if not settings.yelp_api_key:
+        return []
+
     params: dict = {
         "location": location or settings.default_location,
         "limit": min(limit, 50),
@@ -103,21 +106,25 @@ async def search_yelp(
 
     headers = {"Authorization": f"Bearer {settings.yelp_api_key}"}
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{YELP_API_BASE}/businesses/search",
-            headers=headers,
-            params=params,
-            timeout=15.0,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-    return [_yelp_to_venue(biz) for biz in data.get("businesses", [])]
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{YELP_API_BASE}/businesses/search",
+                headers=headers,
+                params=params,
+                timeout=15.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        return [_yelp_to_venue(biz) for biz in data.get("businesses", [])]
+    except Exception:
+        return []
 
 
 async def get_yelp_details(business_id: str) -> Venue | None:
     """Get detailed info for a single Yelp business."""
+    if not settings.yelp_api_key:
+        return None
     headers = {"Authorization": f"Bearer {settings.yelp_api_key}"}
 
     async with httpx.AsyncClient() as client:
@@ -144,6 +151,8 @@ async def get_yelp_details(business_id: str) -> Venue | None:
 
 async def get_yelp_reviews(business_id: str) -> list[dict]:
     """Get up to 3 reviews for a Yelp business (free tier limit)."""
+    if not settings.yelp_api_key:
+        return []
     headers = {"Authorization": f"Bearer {settings.yelp_api_key}"}
 
     async with httpx.AsyncClient() as client:

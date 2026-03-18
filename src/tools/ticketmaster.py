@@ -84,6 +84,9 @@ async def search_ticketmaster(
     Returns:
         List of Venue objects.
     """
+    if not settings.ticketmaster_api_key:
+        return []
+
     params: dict = {
         "apikey": settings.ticketmaster_api_key,
         "size": min(limit, 50),

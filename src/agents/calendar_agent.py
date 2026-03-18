@@ -43,11 +43,7 @@ class CalendarDeps:
     user_emails: dict[str, str] = field(default_factory=dict)  # user_id -> email
 
 
-calendar_agent = Agent(
-    settings.primary_model,
-    result_type=AvailabilityResult,
-    deps_type=CalendarDeps,
-    system_prompt="""\
+SYSTEM_PROMPT = """\
 You are a calendar coordination specialist for a group outing planner.
 Your job is to find time slots when all group members are available.
 
@@ -59,12 +55,12 @@ When finding availability:
 - Present the best options clearly with day and time
 
 Use the tools to query calendars and find group overlap.
-""",
-)
+"""
 
 
-@calendar_agent.tool
-async def check_user_availability(
+# ── Tool functions ─────────────────────────────────────────────────────
+
+async def _check_user_availability(
     ctx: RunContext[CalendarDeps],
     user_id: str,
     start_date: str,
@@ -88,8 +84,7 @@ async def check_user_availability(
     return busy_periods
 
 
-@calendar_agent.tool
-async def find_group_free_slots(
+async def _find_group_free_slots(
     ctx: RunContext[CalendarDeps],
     start_date: str,
     end_date: str,
@@ -115,7 +110,7 @@ async def find_group_free_slots(
         try:
             busy = await get_free_busy(token_data, time_min, time_max)
             busy_by_user[user_id] = busy
-        except Exception as e:
+        except Exception:
             busy_by_user[user_id] = []  # Assume free if calendar fails
 
     slots = find_group_availability(
@@ -129,8 +124,7 @@ async def find_group_free_slots(
     return [s.model_dump(mode="json") for s in slots]
 
 
-@calendar_agent.tool
-async def send_calendar_invite(
+async def _send_calendar_invite(
     ctx: RunContext[CalendarDeps],
     organizer_user_id: str,
     event_title: str,
@@ -172,17 +166,39 @@ async def send_calendar_invite(
         return {"success": False, "message": str(e)}
 
 
+# ── Lazy agent initialization ─────────────────────────────────────────
+
+_calendar_agent: Agent | None = None
+
+
+def get_calendar_agent() -> Agent:
+    """Lazy-initialize the calendar agent."""
+    global _calendar_agent
+    if _calendar_agent is None:
+        _calendar_agent = Agent(
+            settings.primary_model,
+            output_type=AvailabilityResult,
+            deps_type=CalendarDeps,
+            system_prompt=SYSTEM_PROMPT,
+        )
+        _calendar_agent.tool(_check_user_availability)
+        _calendar_agent.tool(_find_group_free_slots)
+        _calendar_agent.tool(_send_calendar_invite)
+    return _calendar_agent
+
+
 async def find_availability(
     user_tokens: dict[str, dict],
     start_date: str,
     end_date: str,
 ) -> AvailabilityResult:
     """Convenience function to find group availability."""
+    agent = get_calendar_agent()
     deps = CalendarDeps(user_tokens=user_tokens)
     prompt = (
         f"Find available time slots for all {len(user_tokens)} group members "
         f"between {start_date} and {end_date}. "
         "Look for evening and weekend slots at least 2 hours long."
     )
-    result = await calendar_agent.run(prompt, deps=deps)
-    return result.data
+    result = await agent.run(prompt, deps=deps)
+    return result.output

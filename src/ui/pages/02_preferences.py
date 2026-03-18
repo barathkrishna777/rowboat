@@ -22,7 +22,7 @@ DIETARY_OPTIONS = [
 ]
 BUDGET_OPTIONS = ["$ (Under $15/person)", "$$ ($15-40/person)", "$$$  ($40-80/person)", "$$$$ ($80+/person)"]
 
-with st.form("preferences"):
+with st.form("preferences_form"):
     st.subheader("Food Preferences")
     cuisines = st.multiselect("Favorite cuisines", CUISINE_OPTIONS)
 

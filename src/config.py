@@ -1,9 +1,12 @@
+import os
+
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     # LLM Providers
     gemini_api_key: str = ""
+    google_api_key: str = ""  # Alias — PydanticAI reads GOOGLE_API_KEY
     groq_api_key: str = ""
 
     # Venue APIs
@@ -21,10 +24,17 @@ class Settings(BaseSettings):
     default_location: str = "Pittsburgh, PA"
 
     # LLM Settings
-    primary_model: str = "google-gla:gemini-2.0-flash"
+    primary_model: str = "google-gla:gemini-2.5-flash"
     fallback_model: str = "groq:llama-3.3-70b-versatile"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
+    def sync_api_keys(self):
+        """Ensure GOOGLE_API_KEY is set for PydanticAI from either env var."""
+        key = self.google_api_key or self.gemini_api_key
+        if key:
+            os.environ["GOOGLE_API_KEY"] = key
+
 
 settings = Settings()
+settings.sync_api_keys()

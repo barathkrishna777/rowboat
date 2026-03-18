@@ -59,6 +59,9 @@ async def search_eventbrite(
     Returns:
         List of Venue objects.
     """
+    if not settings.eventbrite_api_key:
+        return []
+
     params: dict = {"expand": "venue,category"}
     if query:
         params["q"] = query
