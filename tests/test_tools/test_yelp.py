@@ -4,9 +4,16 @@ import pytest
 import respx
 import httpx
 
+from src.config import settings
 from src.tools.yelp import search_yelp, get_yelp_details, YELP_API_BASE
 from src.models.event import VenueSource, VenueCategory
 from src.models.user import BudgetTier
+
+
+@pytest.fixture(autouse=True)
+def _set_yelp_key(monkeypatch):
+    """Ensure tests run with a mock API key so guards don't short-circuit."""
+    monkeypatch.setattr(settings, "yelp_api_key", "test-key-123")
 
 
 @respx.mock
