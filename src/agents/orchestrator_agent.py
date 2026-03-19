@@ -27,6 +27,7 @@ from src.models.user import UserPreferences, User, BudgetTier, DietaryRestrictio
 from src.models.constraints import ConstraintSet
 from src.agents.search_agent import run_search, SearchResult
 from src.agents.recommendation_agent import run_recommendation, RecommendationResult
+from src.constraints.solver import rank_venues as direct_rank_venues
 from src.tools.google_calendar import find_group_availability
 
 
@@ -337,6 +338,23 @@ def _register_orchestrator_tools(agent: Agent):
                 group_member_names=member_names,
             )
             ctx.deps.recommendation_result = result
+
+            # If LLM-based recommendation returned empty, fall back to direct scoring
+            if not result.ranked_venues:
+                ctx.deps.agent_log.append("[Recommend] LLM returned empty — using direct constraint solver")
+                scored = direct_rank_venues(
+                    ctx.deps.search_result.venues, constraint_set, preferences
+                )
+                ranked = [sv for sv in scored if sv.total_score > 0]
+                rejected = [sv for sv in scored if sv.total_score == 0]
+                result = RecommendationResult(
+                    ranked_venues=ranked,
+                    rejected_venues=rejected,
+                    rag_insights=result.rag_insights,
+                    summary=f"Ranked {len(ranked)} venues using constraint scoring.",
+                )
+                ctx.deps.recommendation_result = result
+
             ctx.deps.agent_log.append(
                 f"[Recommend] Ranked {len(result.ranked_venues)} venues, "
                 f"rejected {len(result.rejected_venues)}"
@@ -356,8 +374,29 @@ def _register_orchestrator_tools(agent: Agent):
                 "summary": result.summary,
             }
         except Exception as e:
-            ctx.deps.agent_log.append(f"[Recommend] Error: {e}")
-            return {"error": str(e)}
+            # Full fallback: use constraint solver directly
+            ctx.deps.agent_log.append(f"[Recommend] Agent failed ({e}), using direct solver")
+            try:
+                scored = direct_rank_venues(
+                    ctx.deps.search_result.venues, constraint_set, preferences
+                )
+                ranked = [sv for sv in scored if sv.total_score > 0]
+                rejected = [sv for sv in scored if sv.total_score == 0]
+                result = RecommendationResult(
+                    ranked_venues=ranked,
+                    rejected_venues=rejected,
+                    summary=f"Ranked {len(ranked)} venues (direct scoring).",
+                )
+                ctx.deps.recommendation_result = result
+                ctx.deps.agent_log.append(f"[Recommend] Direct solver: {len(ranked)} ranked")
+                return {
+                    "ranked_count": len(ranked),
+                    "rejected_count": len(rejected),
+                    "top_3": [{"name": sv.venue.name, "score": round(sv.total_score * 100)} for sv in ranked[:3]],
+                }
+            except Exception as e2:
+                ctx.deps.agent_log.append(f"[Recommend] Direct solver also failed: {e2}")
+                return {"error": str(e2)}
 
     @agent.tool
     async def tool_build_itinerary(
@@ -594,13 +633,34 @@ async def _fallback_orchestration(
             constraint_set=constraint_set,
             group_member_names=[m.get("name", "") for m in request.members],
         )
+        # If LLM recommendation returned empty, use direct constraint solver
+        if not rec_result.ranked_venues:
+            plan.agent_log.append("[Recommend] LLM returned empty — using direct solver")
+            scored = direct_rank_venues(result.venues, constraint_set, preferences)
+            ranked = [sv for sv in scored if sv.total_score > 0]
+            rejected = [sv for sv in scored if sv.total_score == 0]
+            rec_result = RecommendationResult(
+                ranked_venues=ranked,
+                rejected_venues=rejected,
+                summary=f"Ranked {len(ranked)} venues using constraint scoring.",
+            )
+
         plan.ranked_venues = rec_result.ranked_venues
         plan.rejected_venues = rec_result.rejected_venues
         plan.rag_insights = rec_result.rag_insights
         plan.steps_completed.append("recommend")
         plan.agent_log.append(f"[Recommend] Ranked {len(rec_result.ranked_venues)} venues")
     except Exception as e:
-        plan.agent_log.append(f"[Recommend] Failed: {e}")
+        # Full fallback: direct constraint solver
+        plan.agent_log.append(f"[Recommend] Agent failed ({e}), using direct solver")
+        try:
+            scored = direct_rank_venues(result.venues, constraint_set, preferences)
+            plan.ranked_venues = [sv for sv in scored if sv.total_score > 0]
+            plan.rejected_venues = [sv for sv in scored if sv.total_score == 0]
+            plan.steps_completed.append("recommend")
+            plan.agent_log.append(f"[Recommend] Direct solver: {len(plan.ranked_venues)} ranked")
+        except Exception as e2:
+            plan.agent_log.append(f"[Recommend] Direct solver also failed: {e2}")
 
     # 4. Build itinerary
     if plan.ranked_venues and plan.available_slots:
