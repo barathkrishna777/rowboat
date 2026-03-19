@@ -477,21 +477,88 @@ elif step == 3:
                 resp = httpx.post(f"{API_BASE}/plans/search",
                                  json={"query": query, "location": location, "max_results": max_results}, timeout=60.0)
                 resp.raise_for_status()
-                st.session_state["search_result"] = resp.json()
+                search_data = resp.json()
+                st.session_state["search_result"] = search_data
                 if "venue_order" in st.session_state:
                     del st.session_state["venue_order"]
+                if "venue_scores" in st.session_state:
+                    del st.session_state["venue_scores"]
             except Exception as e:
                 st.error(f"Search failed: {e}")
+
+        # Run constraint solver on search results
+        if "search_result" in st.session_state:
+            search_data = st.session_state["search_result"]
+            raw_venues = search_data.get("venues", [])
+            if raw_venues:
+                with st.spinner("🧠 Scoring venues against group preferences..."):
+                    try:
+                        user_prefs = st.session_state.get("user_preferences", {})
+                        members = st.session_state.get("members", [])
+                        prefs_list = []
+                        for _ in members:
+                            prefs_list.append(user_prefs)
+
+                        rec_resp = httpx.post(f"{API_BASE}/plans/recommend",
+                            json={
+                                "venues": raw_venues,
+                                "preferences": prefs_list,
+                                "group_id": st.session_state.get("group_id", ""),
+                                "budget_max": user_prefs.get("budget_max", "$$"),
+                                "dietary_restrictions": user_prefs.get("dietary_restrictions", []),
+                                "dealbreakers": user_prefs.get("dealbreakers", []),
+                                "member_names": [m["name"] for m in members],
+                            }, timeout=90.0)
+                        rec_resp.raise_for_status()
+                        rec_data = rec_resp.json()
+
+                        # Store scores keyed by venue name for display
+                        score_map = {}
+                        for sv in rec_data.get("ranked_venues", []):
+                            vn = sv.get("venue", {}).get("name", "")
+                            score_map[vn] = {
+                                "score": sv.get("score", 0),
+                                "breakdown": sv.get("score_breakdown", {}),
+                                "explanation": sv.get("explanation", ""),
+                            }
+                        for sv in rec_data.get("rejected_venues", []):
+                            vn = sv.get("venue", {}).get("name", "")
+                            score_map[vn] = {
+                                "score": 0,
+                                "breakdown": sv.get("score_breakdown", {}),
+                                "explanation": sv.get("explanation", ""),
+                            }
+                        st.session_state["venue_scores"] = score_map
+                        if rec_data.get("rag_insights"):
+                            st.session_state["rag_insights"] = rec_data["rag_insights"]
+
+                        # Re-sort venues by constraint score (best first)
+                        scored_order = sorted(
+                            range(len(raw_venues)),
+                            key=lambda i: score_map.get(raw_venues[i].get("name", ""), {}).get("score", 0),
+                            reverse=True,
+                        )
+                        st.session_state["venue_order"] = scored_order
+
+                    except Exception as e:
+                        st.warning(f"Scoring unavailable (using default order): {e}")
 
     if "search_result" in st.session_state:
         result = st.session_state["search_result"]
         if result.get("summary"):
             st.info(result["summary"])
 
+        # Show RAG insights if available
+        rag_insights = st.session_state.get("rag_insights")
+        if rag_insights:
+            st.caption(f"🧠 {rag_insights}")
+
         venues = result.get("venues", [])
+        score_map = st.session_state.get("venue_scores", {})
+
         if venues:
-            st.subheader(f"{len(venues)} venues found — reorder your preferences")
-            st.caption("Use the ▲ ▼ buttons to rank your preferred venues. Top 3 are highlighted with gold, silver, and bronze.")
+            st.subheader(f"{len(venues)} venues found — ranked by group fit")
+            st.caption("Venues are auto-ranked by how well they match your group's preferences. Use ▲ ▼ to adjust. Top 3 are highlighted.")
 
             # Maintain ordering in session state
             if "venue_order" not in st.session_state or len(st.session_state["venue_order"]) != len(venues):
@@ -507,10 +574,20 @@ elif step == 3:
                 rating = f"{'⭐' * int(rating_val)}" if rating_val else ""
                 addr = venue.get("address", "")
 
+                # Get constraint score
+                v_score_info = score_map.get(venue.get("name", ""), {})
+                v_score = v_score_info.get("score", -1)
+                v_explanation = v_score_info.get("explanation", "")
+                v_breakdown = v_score_info.get("breakdown", {})
+                rejected = v_score == 0 and "hard_constraint_violations" in v_breakdown
+
                 pref_cls = ""
                 pref_label = ""
                 rank_cls = "rank-other"
-                if pos == 0:
+                if rejected:
+                    pref_cls = ""
+                    pref_label = '<div class="pref-label" style="color:#DC2626;font-size:11px;">❌ CONSTRAINT VIOLATION</div>'
+                elif pos == 0:
                     pref_cls = "pref-1"
                     pref_label = '<div class="pref-label pref-label-1">🥇 1st preference</div>'
                     rank_cls = "rank-1"
@@ -526,16 +603,35 @@ elif step == 3:
                 cat_badges = "".join(f'<span class="venue-badge">{c}</span>' for c in cats[:3])
                 price_html = f'<span class="price-badge">{price}</span>' if price else ""
 
+                # Score badge
+                score_html = ""
+                if v_score >= 0:
+                    score_pct = int(v_score * 100)
+                    if score_pct >= 70:
+                        score_color = "#1DB954"
+                    elif score_pct >= 40:
+                        score_color = "#FF9500"
+                    else:
+                        score_color = "#DC2626"
+                    score_html = (
+                        f'<span style="float:right;background:{score_color};color:white;'
+                        f'padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;">'
+                        f'{score_pct}% match</span>'
+                    )
+
+                card_opacity = "opacity:0.5;" if rejected else ""
+
                 card_col, btn_col = st.columns([10, 1])
                 with card_col:
                     st.markdown(
-                        f'<div class="venue-card {pref_cls}">'
+                        f'<div class="venue-card {pref_cls}" style="{card_opacity}">'
                         f'{pref_label}'
                         f'<span class="rank-badge {rank_cls}">{pos+1}</span>'
-                        f'<span class="venue-name">{venue["name"]}</span> {price_html}'
+                        f'<span class="venue-name">{venue["name"]}</span> {price_html} {score_html}'
                         f'<span class="venue-meta" style="margin-left:8px">{rating}</span><br>'
                         f'<span class="venue-meta">📍 {addr}</span><br>'
                         f'{cat_badges}'
+                        f'<div style="font-size:11px;color:#8E99A4;margin-top:4px;">{v_explanation}</div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
