@@ -1,8 +1,13 @@
-"""Search Agent — finds venues/events across Yelp, Eventbrite, and Ticketmaster."""
+"""Search Agent — finds venues/events across Google Places, Yelp, Eventbrite, and Ticketmaster.
+
+Uses parallel API calls with per-source timeouts. If ALL external APIs fail,
+falls back to Gemini LLM to generate venue recommendations (guaranteed results).
+"""
 
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
@@ -11,9 +16,11 @@ from pydantic_ai import Agent, RunContext
 from src.config import settings
 from src.models.event import Venue
 from src.tools.eventbrite import search_eventbrite
-from src.tools.google_places import search_google_places
+from src.tools.google_places import search_google_places, _search_via_gemini
 from src.tools.ticketmaster import search_ticketmaster
 from src.tools.yelp import get_yelp_reviews, search_yelp
+
+logger = logging.getLogger(__name__)
 
 
 class SearchResult(BaseModel):
@@ -159,10 +166,13 @@ async def _search_source_safe(
     """Run a single search source with its own timeout. Never raises."""
     try:
         venues = await asyncio.wait_for(coro, timeout=timeout)
+        logger.info(f"[Search] {name}: returned {len(venues)} venues")
         return name, venues
     except asyncio.TimeoutError:
+        logger.warning(f"[Search] {name}: timed out after {timeout}s")
         return name, []
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[Search] {name}: failed with {type(e).__name__}: {e}")
         return name, []
 
 
@@ -225,6 +235,21 @@ async def _run_parallel_search(
     sources_with_results = [
         name for name, venues in results if venues
     ]
+
+    # If ALL sources returned empty, use Gemini LLM as a guaranteed fallback
+    if not unique_venues:
+        logger.info("[Search] All API sources returned empty — falling back to Gemini LLM")
+        try:
+            gemini_venues = await asyncio.wait_for(
+                _search_via_gemini(query, loc, max_results),
+                timeout=per_source_timeout,
+            )
+            unique_venues = gemini_venues
+            sources_searched.append("Gemini LLM")
+            sources_with_results.append("Gemini LLM")
+            logger.info(f"[Search] Gemini fallback returned {len(gemini_venues)} venues")
+        except Exception as e:
+            logger.warning(f"[Search] Gemini fallback also failed: {type(e).__name__}: {e}")
 
     summary = (
         f"Found {len(unique_venues)} unique venues from {', '.join(sources_with_results)}"

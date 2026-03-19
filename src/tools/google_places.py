@@ -6,6 +6,7 @@ Falls back to a Gemini-powered venue lookup if the Places API is not enabled.
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 
 import httpx
@@ -13,6 +14,8 @@ import httpx
 from src.config import settings
 from src.models.event import Venue, VenueCategory, VenueSource
 from src.models.user import BudgetTier
+
+logger = logging.getLogger(__name__)
 
 PLACES_API_BASE = "https://places.googleapis.com/v1/places"
 
@@ -186,11 +189,16 @@ async def search_google_places(
 
     # Try Places API first, fall back to Gemini
     try:
-        return await _search_places_api(query, loc, limit)
-    except Exception:
-        pass
+        venues = await _search_places_api(query, loc, limit)
+        logger.info(f"[GooglePlaces] Places API returned {len(venues)} venues")
+        return venues
+    except Exception as e:
+        logger.info(f"[GooglePlaces] Places API failed ({type(e).__name__}: {e}), trying Gemini fallback")
 
     try:
-        return await _search_via_gemini(query, loc, limit)
-    except Exception:
+        venues = await _search_via_gemini(query, loc, limit)
+        logger.info(f"[GooglePlaces] Gemini fallback returned {len(venues)} venues")
+        return venues
+    except Exception as e:
+        logger.warning(f"[GooglePlaces] Gemini fallback also failed: {type(e).__name__}: {e}")
         return []

@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api import calendar, groups, plans, preferences
+
+# Enable logging so we can see search/API diagnostics in Railway
+logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
 
 app = FastAPI(
     title="Outing Planner API",
