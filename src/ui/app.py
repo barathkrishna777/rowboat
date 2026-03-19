@@ -5,6 +5,7 @@ import httpx
 import random
 import urllib.parse
 from datetime import datetime, timedelta, time as dt_time
+# from streamlit_sortables import sort_items  # replaced with custom card reorder
 
 API_BASE = "http://localhost:8000/api"
 
@@ -80,20 +81,24 @@ st.markdown("""
     .member-chip { display: inline-flex; align-items: center; gap: 6px; background: #F5F7FA; border: 1px solid #E4E8EC; border-radius: 20px; padding: 6px 14px; margin: 4px; font-size: 14px; color: #363F45; }
     .member-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: #1DB954; }
 
+    /* ── Reorder Buttons ──────────────────────────────── */
+    .reorder-btn { display: inline-flex; align-items: center; gap: 2px; background: #F5F7FA; border: 1px solid #E4E8EC; border-radius: 6px; padding: 2px 8px; font-size: 12px; color: #6B7785; cursor: pointer; }
+    .reorder-btn:hover { background: #E8ECF0; color: #192024; }
+
     /* ── Unified Calendar ─────────────────────────────── */
     .cal-overlay { background: white; border: 1px solid #E8ECF0; border-radius: 12px; padding: 1rem 1.2rem; margin-bottom: 1rem; }
-    .cal-header { font-size: 16px; font-weight: 700; color: #192024; margin-bottom: 12px; }
+    .cal-header { font-size: 18px; font-weight: 700; color: #192024; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #F0F2F5; }
     .cal-grid { display: grid; gap: 2px; }
-    .cal-grid-header { font-size: 11px; font-weight: 600; color: #6B7785; text-align: center; padding: 4px 0; }
+    .cal-grid-header { font-size: 14px; font-weight: 700; color: #192024; text-align: center; padding: 6px 0; }
     .cal-cell { height: 28px; border-radius: 3px; position: relative; }
     .cal-free { background: #F0F2F5; }
     .cal-busy { background: #FECACA; }
-    .cal-chosen { background: #FDBA74; }
-    .cal-chosen-highlight { background: #FF690F; border-radius: 4px; box-shadow: 0 0 0 1px rgba(255,105,15,0.3); }
+    .cal-chosen { background: #FEF3C7; }
+    .cal-chosen-highlight { background: #D1FAE5; border-radius: 4px; box-shadow: 0 0 0 1px rgba(16,185,129,0.3); }
     .cal-hour-label { font-size: 11px; color: #8E99A4; text-align: right; padding-right: 6px; display: flex; align-items: center; justify-content: flex-end; }
     .cal-cell-label { font-size: 9px; padding: 2px 4px; position: absolute; top: 50%; transform: translateY(-50%); }
     .cal-cell-busy { color: #991B1B; }
-    .cal-cell-chosen { color: white; font-weight: 600; }
+    .cal-cell-chosen { color: #065F46; font-weight: 600; }
 
     /* ── Form Inputs ──────────────────────────────────── */
     .stTextInput > div > div > input, .stTextArea > div > div > textarea { border-radius: 8px !important; border-color: #E4E8EC !important; }
@@ -109,7 +114,7 @@ st.markdown("""
 
 # ── Session State ──────────────────────────────────────────────────────
 
-STEPS = ["Create Group", "Preferences", "Calendar", "Find Venues", "Review & Book", "Feedback"]
+STEPS = ["Create Group", "Preferences", "Calendar", "Find Venues", "Review & Book", "Booking Summary", "Feedback"]
 
 if "current_step" not in st.session_state:
     st.session_state.current_step = 0
@@ -183,9 +188,9 @@ if step == 0:
             col1, col2 = st.columns(2)
             with col1:
                 group_name = st.text_input("Group Name", placeholder="Friday Night Crew")
-                your_email = st.text_input("Your Email", placeholder="john@example.com")
             with col2:
                 your_name = st.text_input("Your Name", placeholder="John Doe")
+            your_email = st.text_input("Your Email", placeholder="john@example.com")
             submitted = st.form_submit_button("Create Group")
             if submitted and group_name and your_name and your_email:
                 try:
@@ -371,17 +376,17 @@ elif step == 2:
         if "slot_order" in st.session_state:
             del st.session_state["slot_order"]
 
-    # [FIX 4] Drag-to-reorder slots (using move up/down buttons)
+    # Slot reordering with venue-card style
     if "available_slots" in st.session_state:
         slots = st.session_state["available_slots"]
-        st.subheader(f"Found {len(slots)} time slots — drag to reorder")
-        st.caption("Move your preferred slots to the top. The top 3 are your highest preference.")
+        st.subheader(f"Found {len(slots)} time slots — reorder your preferences")
+        st.caption("Use the ▲ ▼ buttons to rank your preferred time slots. Top 3 are highlighted with gold, silver, and bronze.")
 
-        # Initialize order
-        if "slot_order" not in st.session_state:
-            st.session_state.slot_order = list(range(len(slots)))
+        # Maintain ordering in session state
+        if "slot_order" not in st.session_state or len(st.session_state["slot_order"]) != len(slots):
+            st.session_state["slot_order"] = list(range(len(slots)))
 
-        order = st.session_state.slot_order
+        order = st.session_state["slot_order"]
 
         for pos, slot_idx in enumerate(order):
             s = slots[slot_idx]
@@ -389,35 +394,48 @@ elif step == 2:
             ed = datetime.fromisoformat(s["end"])
             dur = (ed - sd).total_seconds() / 3600
             day_str = sd.strftime("%A, %b %d")
-            time_str = f"{sd.strftime('%I:%M %p')} - {ed.strftime('%I:%M %p')}"
+            time_str = f"{sd.strftime('%I:%M %p')} – {ed.strftime('%I:%M %p')}"
+            members_str = ", ".join(s.get("users", []))
+            weekend = "🌴 Weekend" if sd.weekday() >= 5 else "💼 Weekday"
 
-            pref_cls = f"pref-{pos+1}" if pos < 3 else ""
+            # Card styling — top 3 get medal highlights
+            pref_cls = ""
             pref_label = ""
+            rank_cls = "rank-other"
             if pos == 0:
+                pref_cls = "pref-1"
                 pref_label = '<div class="pref-label pref-label-1">🥇 1st preference</div>'
+                rank_cls = "rank-1"
             elif pos == 1:
+                pref_cls = "pref-2"
                 pref_label = '<div class="pref-label pref-label-2">🥈 2nd preference</div>'
+                rank_cls = "rank-2"
             elif pos == 2:
+                pref_cls = "pref-3"
                 pref_label = '<div class="pref-label pref-label-3">🥉 3rd preference</div>'
+                rank_cls = "rank-3"
 
-            st.markdown(f"""{pref_label}<div class="venue-card {pref_cls}">
-                <span class="venue-name">{day_str}</span><br>
-                <span class="venue-meta">{time_str} ({dur:.0f}h) — {', '.join(s['users'])}</span>
-            </div>""", unsafe_allow_html=True)
-
-            # Move buttons
-            bcol1, bcol2, bcol3 = st.columns([1, 1, 6])
-            with bcol1:
+            card_col, btn_col = st.columns([10, 1])
+            with card_col:
+                st.markdown(
+                    f'<div class="venue-card {pref_cls}">'
+                    f'{pref_label}'
+                    f'<span class="rank-badge {rank_cls}">{pos+1}</span>'
+                    f'<span class="venue-name">📅 {day_str}</span> '
+                    f'<span class="venue-badge">{weekend}</span><br>'
+                    f'<span class="venue-meta">🕐 {time_str} ({dur:.0f}h)</span><br>'
+                    f'<span class="venue-meta">👥 {members_str}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            with btn_col:
                 if pos > 0:
-                    if st.button("⬆", key=f"up_{pos}", use_container_width=True):
-                        order[pos], order[pos - 1] = order[pos - 1], order[pos]
-                        st.session_state.slot_order = order
+                    if st.button("▲", key=f"slot_up_{pos}"):
+                        order[pos], order[pos-1] = order[pos-1], order[pos]
                         st.rerun()
-            with bcol2:
                 if pos < len(order) - 1:
-                    if st.button("⬇", key=f"dn_{pos}", use_container_width=True):
-                        order[pos], order[pos + 1] = order[pos + 1], order[pos]
-                        st.session_state.slot_order = order
+                    if st.button("▼", key=f"slot_down_{pos}"):
+                        order[pos], order[pos+1] = order[pos+1], order[pos]
                         st.rerun()
 
         st.session_state["slot_rankings"] = order
@@ -467,48 +485,63 @@ elif step == 3:
 
         venues = result.get("venues", [])
         if venues:
-            st.subheader(f"{len(venues)} venues found — reorder by preference")
-            st.caption("Move your preferred venues to the top. The top 3 are highlighted.")
+            st.subheader(f"{len(venues)} venues found — reorder your preferences")
+            st.caption("Use the ▲ ▼ buttons to rank your preferred venues. Top 3 are highlighted with gold, silver, and bronze.")
 
-            if "venue_order" not in st.session_state:
-                st.session_state.venue_order = list(range(len(venues)))
+            # Maintain ordering in session state
+            if "venue_order" not in st.session_state or len(st.session_state["venue_order"]) != len(venues):
+                st.session_state["venue_order"] = list(range(len(venues)))
 
-            v_order = st.session_state.venue_order
+            v_order = st.session_state["venue_order"]
 
             for pos, vi in enumerate(v_order):
                 venue = venues[vi]
                 cats = venue.get("categories", [])
-                badges = "".join(f'<span class="venue-badge">{c}</span>' for c in cats[:3])
-                price_html = f'<span class="price-badge">{venue.get("price_tier","")}</span>' if venue.get("price_tier") else ""
-                rating_stars = "⭐" * int(venue.get("rating", 0)) if venue.get("rating") else ""
+                price = venue.get("price_tier", "")
+                rating_val = venue.get("rating", 0)
+                rating = f"{'⭐' * int(rating_val)}" if rating_val else ""
+                addr = venue.get("address", "")
 
-                pref_cls = f"pref-{pos+1}" if pos < 3 else ""
+                pref_cls = ""
                 pref_label = ""
+                rank_cls = "rank-other"
                 if pos == 0:
+                    pref_cls = "pref-1"
                     pref_label = '<div class="pref-label pref-label-1">🥇 1st preference</div>'
+                    rank_cls = "rank-1"
                 elif pos == 1:
+                    pref_cls = "pref-2"
                     pref_label = '<div class="pref-label pref-label-2">🥈 2nd preference</div>'
+                    rank_cls = "rank-2"
                 elif pos == 2:
+                    pref_cls = "pref-3"
                     pref_label = '<div class="pref-label pref-label-3">🥉 3rd preference</div>'
+                    rank_cls = "rank-3"
 
-                st.markdown(f"""{pref_label}<div class="venue-card {pref_cls}">
-                    <span class="venue-name">{venue['name']}</span> {price_html}<br>
-                    <span class="venue-meta">{venue.get('address','')} {rating_stars}</span><br>
-                    {badges}
-                </div>""", unsafe_allow_html=True)
+                cat_badges = "".join(f'<span class="venue-badge">{c}</span>' for c in cats[:3])
+                price_html = f'<span class="price-badge">{price}</span>' if price else ""
 
-                bc1, bc2, bc3 = st.columns([1, 1, 6])
-                with bc1:
+                card_col, btn_col = st.columns([10, 1])
+                with card_col:
+                    st.markdown(
+                        f'<div class="venue-card {pref_cls}">'
+                        f'{pref_label}'
+                        f'<span class="rank-badge {rank_cls}">{pos+1}</span>'
+                        f'<span class="venue-name">{venue["name"]}</span> {price_html}'
+                        f'<span class="venue-meta" style="margin-left:8px">{rating}</span><br>'
+                        f'<span class="venue-meta">📍 {addr}</span><br>'
+                        f'{cat_badges}'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                with btn_col:
                     if pos > 0:
-                        if st.button("⬆", key=f"vup_{pos}", use_container_width=True):
+                        if st.button("▲", key=f"venue_up_{pos}"):
                             v_order[pos], v_order[pos-1] = v_order[pos-1], v_order[pos]
-                            st.session_state.venue_order = v_order
                             st.rerun()
-                with bc2:
                     if pos < len(v_order) - 1:
-                        if st.button("⬇", key=f"vdn_{pos}", use_container_width=True):
+                        if st.button("▼", key=f"venue_down_{pos}"):
                             v_order[pos], v_order[pos+1] = v_order[pos+1], v_order[pos]
-                            st.session_state.venue_order = v_order
                             st.rerun()
 
             st.session_state["venue_rankings"] = v_order
@@ -544,64 +577,134 @@ elif step == 4:
     ranked_venues = [venues[i] for i in venue_rankings if i < len(venues)]
     ranked_slots = [slots[i] for i in slot_rankings if i < len(slots)] if slot_rankings and slots else []
     members = st.session_state.get("members", [])
+    user_prefs = st.session_state.get("user_preferences", {})
+    preferred_cuisines = [c.lower() for c in user_prefs.get("cuisine_preferences", [])]
 
-    # Build itinerary items
+    # [FIX 3] Only use slots where ALL members are free
+    valid_slots = []
+    for s in ranked_slots:
+        busy_per = s.get("busy_per_member", {})
+        start_h = s.get("start_h", datetime.fromisoformat(s["start"]).hour)
+        end_h = s.get("end_h", datetime.fromisoformat(s["end"]).hour)
+        all_free = True
+        for m in members:
+            for b in busy_per.get(m["name"], []):
+                if b["start"] <= start_h and b["end"] >= end_h:
+                    all_free = False
+                    break
+            if not all_free:
+                break
+        if all_free:
+            valid_slots.append(s)
+
+    # Build itinerary items — each venue paired with ALL valid slots
     itinerary_items = []
     for vi, venue in enumerate(ranked_venues):
-        slot = ranked_slots[vi] if vi < len(ranked_slots) else (ranked_slots[0] if ranked_slots else None)
-        itinerary_items.append({"venue": venue, "slot": slot, "idx": vi})
+        itinerary_items.append({"venue": venue, "slots": valid_slots, "idx": vi})
 
+    # Per-venue selected slot stored in session state
+    if "venue_slot_choices" not in st.session_state:
+        st.session_state.venue_slot_choices = {}
     if "hover_idx" not in st.session_state:
         st.session_state.hover_idx = 0
+    if "selected_booking" not in st.session_state:
+        st.session_state.selected_booking = None
 
     left_col, right_col = st.columns([3, 2])
 
     with left_col:
         st.subheader("Your Itinerary")
-        total_cost = 0
+        st.caption("Click on a card to select it as your final booking. The right panel previews the focused card.")
         tier_cost = {"$": 12, "$$": 25, "$$$": 55, "$$$$": 90}
 
         for item in itinerary_items:
             v = item["venue"]
-            s = item["slot"]
+            available_slots = item["slots"]
             idx = item["idx"]
             cost = tier_cost.get(v.get("price_tier", ""), 20)
-            total_cost += cost
+
+            # Determine which slot is chosen for this venue
+            chosen_slot_idx = st.session_state.venue_slot_choices.get(idx, 0)
+            if chosen_slot_idx >= len(available_slots):
+                chosen_slot_idx = 0
+            s = available_slots[chosen_slot_idx] if available_slots else None
 
             rank_cls = f"rank-{idx+1}" if idx < 3 else "rank-other"
             slot_str = ""
             if s:
                 sd = datetime.fromisoformat(s["start"])
                 ed = datetime.fromisoformat(s["end"])
-                slot_str = f"{sd.strftime('%a %b %d, %I:%M %p')} - {ed.strftime('%I:%M %p')}"
+                slot_str = f"{sd.strftime('%a %b %d, %I:%M %p')} – {ed.strftime('%I:%M %p')}"
 
             price_html = f'<span class="price-badge">{v.get("price_tier","")}</span>' if v.get("price_tier") else ""
-            badges = "".join(f'<span class="venue-badge">{c}</span>' for c in v.get("categories", [])[:2])
-            is_active = st.session_state.hover_idx == idx
-            card_cls = "venue-card selected" if is_active else "venue-card"
+
+            # Category + cuisine badges
+            cat_badges = "".join(f'<span class="venue-badge">{c}</span>' for c in v.get("categories", [])[:2])
+            venue_cats_lower = [c.lower() for c in v.get("categories", [])]
+            venue_name_lower = v.get("name", "").lower()
+            cuisine_matches = [c.title() for c in preferred_cuisines if c in venue_cats_lower or c in venue_name_lower]
+            cuisine_badges = "".join(f'<span class="venue-badge" style="background:#E8F8EE;color:#1DB954">🍽️ {c}</span>' for c in cuisine_matches)
+
+            is_selected = st.session_state.selected_booking == idx
+            is_viewing = st.session_state.hover_idx == idx
+            card_cls = "venue-card selected" if is_selected else ("venue-card" + (" selected" if is_viewing else ""))
+
+            selected_marker = ""
+            if is_selected:
+                selected_marker = '<span style="float:right;background:#1DB954;color:white;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;">✓ Selected</span>'
 
             st.markdown(f"""<div class="{card_cls}">
                 <span class="rank-badge {rank_cls}">{idx+1}</span>
-                <span class="venue-name">{v['name']}</span> {price_html}<br>
+                <span class="venue-name">{v['name']}</span> {price_html} {selected_marker}<br>
                 <span class="venue-meta">📍 {v.get('address','Address TBD')}</span><br>
                 <span class="venue-meta">🕐 {slot_str}</span><br>
-                {badges}
+                {cat_badges}{cuisine_badges}
                 <span class="venue-meta" style="float:right">~${cost}/person</span>
             </div>""", unsafe_allow_html=True)
 
-            if st.button(f"{'✦ Viewing' if is_active else 'View on calendar & map'}", key=f"hover_{idx}",
-                         use_container_width=True, disabled=is_active):
-                st.session_state.hover_idx = idx
-                st.rerun()
+            # Time slot dropdown if multiple slots available
+            btn_cols = st.columns([2, 1, 1]) if len(available_slots) > 1 else st.columns([1, 1])
+            col_i = 0
+            if len(available_slots) > 1:
+                with btn_cols[col_i]:
+                    slot_options = []
+                    for si, sl in enumerate(available_slots):
+                        ssd = datetime.fromisoformat(sl["start"])
+                        sed = datetime.fromisoformat(sl["end"])
+                        slot_options.append(f"{ssd.strftime('%a %b %d, %I:%M %p')} – {sed.strftime('%I:%M %p')}")
+                    new_choice = st.selectbox(
+                        "Time slot", slot_options, index=chosen_slot_idx,
+                        key=f"slot_choice_{idx}", label_visibility="collapsed"
+                    )
+                    new_idx = slot_options.index(new_choice)
+                    if new_idx != chosen_slot_idx:
+                        st.session_state.venue_slot_choices[idx] = new_idx
+                        st.rerun()
+                col_i += 1
 
-        st.markdown(f"### Total estimated: ~${total_cost}/person")
+            with btn_cols[col_i]:
+                if st.button("🔍 Preview" if not is_viewing else "✦ Viewing", key=f"hover_{idx}",
+                             use_container_width=True, disabled=is_viewing):
+                    st.session_state.hover_idx = idx
+                    st.rerun()
+            with btn_cols[col_i + 1]:
+                if is_selected:
+                    st.button("✓ Selected", key=f"sel_{idx}", use_container_width=True, disabled=True)
+                else:
+                    if st.button("📌 Select", key=f"sel_{idx}", use_container_width=True):
+                        st.session_state.selected_booking = idx
+                        st.session_state.hover_idx = idx
+                        st.rerun()
 
     with right_col:
         active = itinerary_items[st.session_state.hover_idx] if itinerary_items else None
 
-        # [FIX 5] Unified calendar — all members side-by-side
-        if active and active["slot"]:
-            slot = active["slot"]
+        # Calendar overlay — all members side-by-side, chosen slot highlighted
+        if active and active["slots"]:
+            active_slot_idx = st.session_state.venue_slot_choices.get(active["idx"], 0)
+            if active_slot_idx >= len(active["slots"]):
+                active_slot_idx = 0
+            slot = active["slots"][active_slot_idx]
             sd = datetime.fromisoformat(slot["start"])
             ed = datetime.fromisoformat(slot["end"])
             busy_per_member = slot.get("busy_per_member", {})
@@ -610,44 +713,60 @@ elif step == 4:
             if end_h <= start_h:
                 end_h = ed.hour + 24 if ed.hour < start_h else ed.hour
 
+            # Determine which hours everyone is free (the "chosen" window)
             member_names = [m["name"] for m in members]
             n_members = len(member_names)
 
-            st.markdown(f'<div class="cal-overlay"><div class="cal-header">📅 {sd.strftime("%A, %B %d")} — Group Calendar</div>', unsafe_allow_html=True)
+            # Find the contiguous block where ALL members are free
+            all_free_hours = set()
+            for h in range(start_h, end_h):
+                everyone_free = True
+                for nm in member_names:
+                    member_busy = busy_per_member.get(nm, [])
+                    if any(b["start"] <= h < b["end"] for b in member_busy):
+                        everyone_free = False
+                        break
+                if everyone_free:
+                    all_free_hours.add(h)
 
-            # Grid: 1 col for hour label + 1 col per member
+            cal_html = f'<div class="cal-overlay">'
+            cal_html += f'<div class="cal-header">📅 {sd.strftime("%A, %B %d")} — Group Calendar</div>'
+
             grid_cols = f"50px {'1fr ' * n_members}"
-            # Header row
-            header_html = f'<div class="cal-grid" style="grid-template-columns: {grid_cols};">'
-            header_html += '<div class="cal-grid-header"></div>'
+            cal_html += f'<div class="cal-grid" style="grid-template-columns: {grid_cols};">'
+            cal_html += '<div class="cal-grid-header"></div>'
             for nm in member_names:
-                short = nm.split()[0] if len(nm) > 10 else nm
-                header_html += f'<div class="cal-grid-header">{short}</div>'
+                cal_html += f'<div class="cal-grid-header" style="font-size:15px;font-weight:700;">{nm}</div>'
 
-            # Hour rows
             for h in range(start_h, end_h):
                 display_h = h % 24
                 h_label = f"{display_h % 12 or 12}{'pm' if display_h >= 12 else 'am'}"
-                header_html += f'<div class="cal-hour-label">{h_label}</div>'
+                cal_html += f'<div class="cal-hour-label">{h_label}</div>'
 
                 for nm in member_names:
                     member_busy = busy_per_member.get(nm, [])
                     is_busy = any(b["start"] <= h < b["end"] for b in member_busy)
 
                     if is_busy:
-                        header_html += '<div class="cal-cell cal-busy"><span class="cal-cell-label cal-cell-busy">Busy</span></div>'
+                        cal_html += '<div class="cal-cell cal-busy"><span class="cal-cell-label cal-cell-busy">Busy</span></div>'
+                    elif h in all_free_hours:
+                        # Everyone free — prominent green highlight for the chosen slot
+                        cal_html += '<div class="cal-cell cal-chosen-highlight"></div>'
                     else:
-                        header_html += '<div class="cal-cell cal-chosen-highlight"><span class="cal-cell-label cal-cell-chosen">✓</span></div>'
+                        # Available for this member but not everyone — light green
+                        cal_html += '<div class="cal-cell" style="background:#E8F8EE;border-radius:3px;"></div>'
 
-            header_html += '</div>'
-            st.markdown(header_html, unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+            cal_html += '</div>'
 
-            # Legend
-            st.markdown("""<div style="display:flex;gap:16px;margin:8px 0 16px 0;font-size:12px;color:#6B7785">
-                <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#FF690F;margin-right:4px;vertical-align:middle"></span>Available / Selected</span>
+            # Legend inside the overlay
+            cal_html += """<div style="display:flex;gap:16px;margin:12px 0 4px 0;font-size:12px;color:#6B7785">
+                <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#D1FAE5;border:1px solid rgba(16,185,129,0.3);margin-right:4px;vertical-align:middle"></span>Everyone free</span>
+                <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#E8F8EE;margin-right:4px;vertical-align:middle"></span>Available</span>
                 <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#FECACA;margin-right:4px;vertical-align:middle"></span>Busy</span>
-            </div>""", unsafe_allow_html=True)
+            </div>"""
+
+            cal_html += '</div>'
+            st.markdown(cal_html, unsafe_allow_html=True)
 
         # [FIX 6] Google Maps embed iframe
         if active:
@@ -666,21 +785,121 @@ elif step == 4:
             </div>""", unsafe_allow_html=True)
 
     st.divider()
-    col1, _ = st.columns(2)
-    with col1:
-        if st.button("📅  Book & Send Invites", type="primary", use_container_width=True):
-            st.session_state["booked"] = True
-            st.session_state["booked_venues"] = ranked_venues
-            st.balloons()
-            st.success("Booked! Calendar invites sent to all group members.")
+    sel_idx = st.session_state.selected_booking
+    if sel_idx is None:
+        st.warning("👆 Please click on a card above to select it as your final booking.")
+    else:
+        chosen = itinerary_items[sel_idx]
+        chosen_v = chosen["venue"]
+        # Get the slot chosen via dropdown for this venue
+        chosen_slot_idx = st.session_state.venue_slot_choices.get(sel_idx, 0)
+        if chosen_slot_idx >= len(valid_slots):
+            chosen_slot_idx = 0
+        chosen_s = valid_slots[chosen_slot_idx] if valid_slots else None
+        chosen_cost = tier_cost.get(chosen_v.get("price_tier", ""), 20)
+        slot_str = ""
+        if chosen_s:
+            sd = datetime.fromisoformat(chosen_s["start"])
+            ed = datetime.fromisoformat(chosen_s["end"])
+            slot_str = f"{sd.strftime('%a %b %d, %I:%M %p')} – {ed.strftime('%I:%M %p')}"
+
+        col1, _ = st.columns(2)
+        with col1:
+            if st.button("📅  Book & Send Invites", type="primary", use_container_width=True):
+                st.session_state["booked"] = True
+                st.session_state["booked_venues"] = [chosen_v]
+                st.session_state["booked_item"] = {
+                    "venue": chosen_v,
+                    "slot": chosen_s,
+                    "slot_str": slot_str,
+                    "cost": chosen_cost,
+                }
+                st.session_state["booked_members"] = [m["name"] for m in members]
+                st.session_state["booked_total_cost"] = chosen_cost
+                st.balloons()
+                advance_step()
+                st.rerun()
+
+
+# ════════════════════════════════════════════════════════════════════════
+# STEP 5: BOOKING SUMMARY
+# ════════════════════════════════════════════════════════════════════════
+elif step == 5:
+    st.markdown('<div class="section-card"><div class="section-title">🎉 Booking Confirmed!</div>'
+                '<div class="section-subtitle">Here\'s a summary of your group outing reservation</div></div>',
+                unsafe_allow_html=True)
+
+    booked_item = st.session_state.get("booked_item", {})
+    booked_members = st.session_state.get("booked_members", [])
+    cost_per_person = st.session_state.get("booked_total_cost", 0)
+
+    st.success("Calendar invites have been sent to all group members!")
+
+    # Group info
+    members_html = "".join(f'<span class="member-chip"><span class="dot"></span>{m}</span>' for m in booked_members)
+    st.markdown(f"**Group:** {members_html}", unsafe_allow_html=True)
+
+    st.divider()
+    st.subheader("📋 Reservation Details")
+
+    if booked_item:
+        v = booked_item["venue"]
+        cats = v.get("categories", [])
+        badges = "".join(f'<span class="venue-badge">{c}</span>' for c in cats[:3])
+        price_html = f'<span class="price-badge">{v.get("price_tier","")}</span>' if v.get("price_tier") else ""
+        rating_stars = f"{'⭐' * int(v.get('rating', 0))}" if v.get("rating") else ""
+
+        st.markdown(f"""<div class="venue-card selected" style="border-width:2px;">
+            <span class="venue-name" style="font-size:22px;">{v['name']}</span> {price_html}<br>
+            <span class="venue-meta" style="font-size:15px;">📍 {v.get('address', 'Address TBD')}</span><br>
+            <span class="venue-meta" style="font-size:15px;">🕐 {booked_item['slot_str']}</span><br>
+            <span class="venue-meta">{rating_stars}</span><br>
+            {badges}
+        </div>""", unsafe_allow_html=True)
+
+        # Google Maps embed for the booked venue
+        addr = v.get("address", "")
+        venue_name = v.get("name", "")
+        query_str = urllib.parse.quote(f"{venue_name}, {addr}")
+        st.markdown(f"""<div class="cal-overlay">
+            <div class="cal-header">📍 Location</div>
+            <iframe width="100%" height="220" style="border:0; border-radius:8px;"
+                loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"
+                src="https://www.google.com/maps/embed/v1/search?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q={query_str}">
+            </iframe>
+        </div>""", unsafe_allow_html=True)
+
+    st.divider()
+
+    # Cost summary
+    n_members = len(booked_members)
+    st.markdown(f"""
+    <div class="section-card" style="background: #FFF9F5; border-color: #FF690F;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <div style="font-size:14px; color:#6B7785;">Estimated cost per person</div>
+                <div style="font-size:28px; font-weight:700; color:#FF690F;">~${cost_per_person}</div>
+            </div>
+            <div>
+                <div style="font-size:14px; color:#6B7785;">Group total ({n_members} people)</div>
+                <div style="font-size:28px; font-weight:700; color:#192024;">~${cost_per_person * n_members}</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.divider()
+    _, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("Continue to Feedback →", type="primary", key="summary_continue", use_container_width=True):
             advance_step()
             st.rerun()
 
 
 # ════════════════════════════════════════════════════════════════════════
-# STEP 5: FEEDBACK
+# STEP 6: FEEDBACK
 # ════════════════════════════════════════════════════════════════════════
-elif step == 5:
+elif step == 6:
     st.markdown('<div class="section-card"><div class="section-title">How Was It?</div>'
                 '<div class="section-subtitle">Rate your outing to help us improve future plans</div></div>',
                 unsafe_allow_html=True)
