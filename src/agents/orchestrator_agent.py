@@ -27,7 +27,7 @@ from src.models.user import UserPreferences, User, BudgetTier, DietaryRestrictio
 from src.models.constraints import ConstraintSet
 from src.agents.search_agent import run_search, SearchResult
 from src.agents.recommendation_agent import run_recommendation, RecommendationResult
-from src.agents.calendar_agent import find_group_availability
+from src.tools.google_calendar import find_group_availability
 
 
 # ── Output Models ──────────────────────────────────────────────────────
@@ -226,25 +226,52 @@ def _register_orchestrator_tools(agent: Agent):
             eh, em = 17, 0
             lh, lm = 23, 0
 
-        # Build mock user tokens (simulated calendar)
+        # Build mock busy periods (simulated calendar — no real Google Calendar)
         member_names = [m.get("name", f"Member {i+1}") for i, m in enumerate(req.members)]
-        user_tokens = {name: f"mock_token_{name}" for name in member_names}
+        # Simulate some random busy blocks so the calendar isn't trivially all-free
+        import random
+        busy_periods_by_user = {}
+        for name in member_names:
+            busy = []
+            for d in range((end - start).days + 1):
+                day = start + timedelta(days=d)
+                # Each member has a ~30% chance of being busy for 1-2 hours on any given day
+                if random.random() < 0.3:
+                    busy_h = random.randint(eh, max(eh + 1, lh - 2))
+                    busy.append({
+                        "start": datetime.combine(day, datetime.min.time().replace(hour=busy_h)).isoformat(),
+                        "end": datetime.combine(day, datetime.min.time().replace(hour=min(busy_h + 2, 23))).isoformat(),
+                    })
+            busy_periods_by_user[name] = busy
+
+        lh_eff = lh if lh > eh else 23  # handle overnight
 
         slots = find_group_availability(
-            user_tokens=user_tokens,
-            start_date=start,
-            end_date=end,
-            earliest_hour=eh,
-            latest_hour=lh if lh > eh else lh + 24,
-            min_duration_hours=2.0,
+            busy_periods_by_user=busy_periods_by_user,
+            date_range_start=datetime.combine(start, datetime.min.time()),
+            date_range_end=datetime.combine(end, datetime.min.time()),
+            min_duration_minutes=120,
+            preferred_hours=(eh, lh_eff),
         )
 
-        ctx.deps.available_slots = slots
-        ctx.deps.agent_log.append(f"[Calendar] Found {len(slots)} available slots")
+        # Convert TimeSlot objects to dicts
+        slot_dicts = []
+        for s in slots:
+            slot_dicts.append({
+                "date": s.start.strftime("%Y-%m-%d"),
+                "day_name": s.start.strftime("%A"),
+                "start_time": s.start.strftime("%I:%M %p"),
+                "end_time": s.end.strftime("%I:%M %p"),
+                "duration_hours": (s.end - s.start).total_seconds() / 3600,
+                "is_weekend": s.start.weekday() >= 5,
+            })
+
+        ctx.deps.available_slots = slot_dicts
+        ctx.deps.agent_log.append(f"[Calendar] Found {len(slot_dicts)} available slots")
 
         # Format for LLM
         slot_summaries = []
-        for s in slots[:10]:
+        for s in slot_dicts[:10]:
             slot_summaries.append({
                 "date": s.get("date", ""),
                 "day": s.get("day_name", ""),
@@ -506,17 +533,41 @@ async def _fallback_orchestration(
         lh, lm = map(int, request.latest_time.split(":"))
 
         member_names = [m.get("name", f"M{i}") for i, m in enumerate(request.members)]
-        user_tokens = {name: f"mock_{name}" for name in member_names}
+        import random
+        busy_periods_by_user = {}
+        for name in member_names:
+            busy = []
+            for d in range((end - start).days + 1):
+                day = start + timedelta(days=d)
+                if random.random() < 0.3:
+                    busy_h = random.randint(eh, max(eh + 1, lh - 2))
+                    busy.append({
+                        "start": datetime.combine(day, datetime.min.time().replace(hour=busy_h)).isoformat(),
+                        "end": datetime.combine(day, datetime.min.time().replace(hour=min(busy_h + 2, 23))).isoformat(),
+                    })
+            busy_periods_by_user[name] = busy
+
+        lh_eff = lh if lh > eh else 23
 
         slots = find_group_availability(
-            user_tokens=user_tokens,
-            start_date=start,
-            end_date=end,
-            earliest_hour=eh,
-            latest_hour=lh if lh > eh else lh + 24,
-            min_duration_hours=2.0,
+            busy_periods_by_user=busy_periods_by_user,
+            date_range_start=datetime.combine(start, datetime.min.time()),
+            date_range_end=datetime.combine(end, datetime.min.time()),
+            min_duration_minutes=120,
+            preferred_hours=(eh, lh_eff),
         )
-        plan.available_slots = slots
+        # Convert TimeSlot objects to dicts for JSON serialization
+        slot_dicts = []
+        for s in slots:
+            slot_dicts.append({
+                "date": s.start.strftime("%Y-%m-%d"),
+                "day_name": s.start.strftime("%A"),
+                "start_time": s.start.strftime("%I:%M %p"),
+                "end_time": s.end.strftime("%I:%M %p"),
+                "duration_hours": (s.end - s.start).total_seconds() / 3600,
+                "is_weekend": s.start.weekday() >= 5,
+            })
+        plan.available_slots = slot_dicts
         plan.steps_completed.append("calendar")
         plan.agent_log.append(f"[Calendar] Found {len(slots)} available slots")
     except Exception as e:
