@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_BASE = "http://localhost:8000/api"
+API_BASE = os.getenv("API_BASE", "http://localhost:8000") + "/api"
 MAPS_EMBED_KEY = os.getenv("GOOGLE_MAPS_EMBED_KEY", "")
 
 # ── Page Config ────────────────────────────────────────────────────────
