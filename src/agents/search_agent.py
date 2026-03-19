@@ -180,37 +180,42 @@ async def _run_parallel_search(
     query: str,
     location: str,
     max_results: int = 10,
-    per_source_timeout: float = 12.0,
 ) -> SearchResult:
     """Run all search sources in parallel, returning whatever completes in time.
 
     This bypasses the LLM agent and calls APIs directly, guaranteeing
     partial results even if some sources are slow or fail.
+
+    Google Places gets a longer timeout (22s) because it does two sequential
+    operations: Places API call → Gemini fallback if Places API fails.
+    Other sources get 10s since they return quickly (often immediately if
+    no API key is configured).
     """
     loc = location or settings.default_location
     city = loc.split(",")[0].strip()
 
-    # Launch all sources concurrently — each with its own timeout
+    # Launch all sources concurrently
+    # Google Places gets extra time: Places API (~2s) + Gemini fallback (~10-15s)
     tasks = [
         _search_source_safe(
             "Google Places",
             search_google_places(query=query, location=loc, limit=max_results),
-            timeout=per_source_timeout,
+            timeout=22.0,
         ),
         _search_source_safe(
             "Yelp",
             search_yelp(location=loc, term=query, limit=max_results),
-            timeout=per_source_timeout,
+            timeout=10.0,
         ),
         _search_source_safe(
             "Eventbrite",
             search_eventbrite(location=loc, query=query, limit=max_results),
-            timeout=per_source_timeout,
+            timeout=10.0,
         ),
         _search_source_safe(
             "Ticketmaster",
             search_ticketmaster(keyword=query, city=city, limit=max_results),
-            timeout=per_source_timeout,
+            timeout=10.0,
         ),
     ]
 
@@ -236,13 +241,14 @@ async def _run_parallel_search(
         name for name, venues in results if venues
     ]
 
-    # If ALL sources returned empty, use Gemini LLM as a guaranteed fallback
+    # If ALL sources returned empty, use Gemini LLM as a guaranteed last resort
+    # This gets a generous 25s timeout — it's our safety net
     if not unique_venues:
         logger.info("[Search] All API sources returned empty — falling back to Gemini LLM")
         try:
             gemini_venues = await asyncio.wait_for(
                 _search_via_gemini(query, loc, max_results),
-                timeout=per_source_timeout,
+                timeout=25.0,
             )
             unique_venues = gemini_venues
             sources_searched.append("Gemini LLM")
@@ -268,24 +274,25 @@ async def run_search(
     query: str,
     location: str = "",
     max_results: int = 10,
-    timeout_seconds: float = 25.0,
+    timeout_seconds: float = 35.0,
 ) -> SearchResult:
     """Search for venues across all sources with a hard timeout guarantee.
 
     Strategy:
-    1. Run all API sources in parallel (each with its own 12s timeout)
-    2. Collect whatever results come back within the overall timeout
-    3. Always return something — never return empty if any source responded
+    1. Run all API sources in parallel — Google Places gets 22s (it does
+       Places API + Gemini fallback sequentially), others get 10s
+    2. If ALL sources return empty, try a dedicated Gemini LLM call (25s)
+    3. Overall hard cap at 35s
 
     Args:
         query: What to search for.
         location: Where to search.
         max_results: Max results per source.
-        timeout_seconds: Maximum total time allowed (default 25s).
+        timeout_seconds: Maximum total time allowed (default 35s).
     """
     try:
         result = await asyncio.wait_for(
-            _run_parallel_search(query, location, max_results, per_source_timeout=12.0),
+            _run_parallel_search(query, location, max_results),
             timeout=timeout_seconds,
         )
         return result
