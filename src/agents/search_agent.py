@@ -151,9 +151,32 @@ def _register_search_tools(agent: Agent):
         return [v.model_dump(exclude_none=True) for v in venues]
 
 
-async def run_search(query: str, location: str = "", max_results: int = 10) -> SearchResult:
-    """Convenience function to run the search agent."""
+async def run_search(
+    query: str,
+    location: str = "",
+    max_results: int = 10,
+    timeout_seconds: float = 25.0,
+) -> SearchResult:
+    """Convenience function to run the search agent with a timeout.
+
+    Args:
+        query: What to search for.
+        location: Where to search.
+        max_results: Max results per source.
+        timeout_seconds: Maximum time allowed for the search (default 25s).
+    """
     agent = get_search_agent()
     deps = SearchDeps(location=location or settings.default_location, max_results_per_source=max_results)
-    result = await agent.run(query, deps=deps)
-    return result.output
+    try:
+        result = await asyncio.wait_for(
+            agent.run(query, deps=deps),
+            timeout=timeout_seconds,
+        )
+        return result.output
+    except asyncio.TimeoutError:
+        # Return whatever we might have — or an empty result with a note
+        return SearchResult(
+            venues=[],
+            summary=f"Search timed out after {timeout_seconds}s. Try a simpler query.",
+            sources_searched=["timeout"],
+        )

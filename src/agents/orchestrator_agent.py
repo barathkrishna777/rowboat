@@ -14,6 +14,7 @@ sub-agents and managing data flow between them.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, date, timedelta
@@ -501,8 +502,13 @@ async def run_orchestrator(request: QuickPlanRequest) -> OrchestratorPlan:
             f"Time window: {request.earliest_time} - {request.latest_time}\n"
             f"Preferences provided: {len(preferences)} member(s)\n"
             "\nCall all tools in order: parse → search → calendar → rank → build itinerary."
+            "\nIMPORTANT: Be fast. Do not overthink. Call each tool ONCE and move on."
         )
-        result = await agent.run(prompt, deps=deps)
+        # Timeout: give the LLM orchestrator 50s max, then fall back to deterministic
+        result = await asyncio.wait_for(
+            agent.run(prompt, deps=deps),
+            timeout=50.0,
+        )
         plan = result.output
 
         # Enrich with data from deps (in case LLM missed some fields)

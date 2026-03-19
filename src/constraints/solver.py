@@ -1,12 +1,16 @@
 """Constraint Solver — scores and ranks venues against group preferences.
 
-Hard constraints (budget, dietary, dealbreakers) instantly reject venues.
-Soft constraints (cuisine match, rating, popularity, group consensus) produce
-a weighted score between 0 and 1.
+Hard constraints (budget, dietary, dealbreakers) apply a heavy penalty
+but no longer instantly reject venues — this ensures we always return
+results even when no venue perfectly matches all criteria.
+
+Soft constraints (cuisine match, rating, popularity, group consensus)
+produce a weighted score between 0 and 1.
 """
 
 from __future__ import annotations
 
+import math
 import re
 from src.models.event import ScoredVenue, Venue, VenueCategory
 from src.models.user import BudgetTier, DietaryRestriction, UserPreferences
@@ -20,6 +24,11 @@ _BUDGET_LEVEL = {
     BudgetTier.HIGH: 3,
     BudgetTier.LUXURY: 4,
 }
+
+# Penalty multipliers for hard constraint violations (0-1, lower = harsher)
+BUDGET_VIOLATION_PENALTY = 0.5     # 50% score reduction for over-budget
+DIETARY_VIOLATION_PENALTY = 0.4    # 60% score reduction for dietary conflict
+DEALBREAKER_PENALTY = 0.3          # 70% score reduction for dealbreaker match
 
 
 def _venue_price_level(venue: Venue) -> int:
@@ -38,50 +47,55 @@ def _text_match_score(needles: list[str], haystack: str) -> float:
     return matches / len(needles)
 
 
-# ── Hard constraint checks ──────────────────────────────────────────
+# ── Hard constraint checks (now return penalty multiplier) ────────
 
 
-def check_budget(venue: Venue, constraint_set: ConstraintSet) -> bool:
-    """Return True if venue passes the budget constraint."""
+def check_budget(venue: Venue, constraint_set: ConstraintSet) -> tuple[bool, float]:
+    """Check budget constraint. Returns (passed, penalty_multiplier).
+
+    If passed, multiplier is 1.0. If violated, multiplier reduces the score.
+    """
     max_level = _BUDGET_LEVEL.get(constraint_set.budget_max, 4)
     venue_level = _venue_price_level(venue)
-    return venue_level <= max_level
+    if venue_level <= max_level:
+        return True, 1.0
+    # How far over budget? 1 tier over = mild penalty, 2+ = heavier
+    overage = venue_level - max_level
+    penalty = max(BUDGET_VIOLATION_PENALTY, 1.0 - overage * 0.25)
+    return False, penalty
 
 
-def check_dietary(venue: Venue, constraint_set: ConstraintSet) -> bool:
-    """Return True if venue doesn't violate dietary restrictions.
-
-    For restaurants/cafes/bars, we check if the venue explicitly supports
-    the required dietary options. If no dietary info is available,
-    we give it the benefit of the doubt (pass).
-    """
+def check_dietary(venue: Venue, constraint_set: ConstraintSet) -> tuple[bool, float]:
+    """Check dietary constraint. Returns (passed, penalty_multiplier)."""
     if not constraint_set.dietary_restrictions:
-        return True
+        return True, 1.0
 
     food_categories = {VenueCategory.RESTAURANT, VenueCategory.BAR, VenueCategory.CAFE}
     if venue.category not in food_categories:
-        return True  # non-food venues pass dietary checks
+        return True, 1.0  # non-food venues pass dietary checks
 
     # If venue has no dietary info, give benefit of the doubt
     if not venue.dietary_options:
-        return True
+        return True, 1.0
 
-    # Check if venue supports all required dietary restrictions
-    # (except NONE which means no restrictions)
     required = {d for d in constraint_set.dietary_restrictions if d != DietaryRestriction.NONE}
     if not required:
-        return True
+        return True, 1.0
 
-    return required.issubset(set(venue.dietary_options))
+    if required.issubset(set(venue.dietary_options)):
+        return True, 1.0
+
+    # Partial match: some restrictions met, some not
+    met = required.intersection(set(venue.dietary_options))
+    fraction_met = len(met) / len(required) if required else 1.0
+    penalty = DIETARY_VIOLATION_PENALTY + (1.0 - DIETARY_VIOLATION_PENALTY) * fraction_met
+    return False, penalty
 
 
-def check_dealbreakers(venue: Venue, constraint_set: ConstraintSet) -> bool:
-    """Return True if venue doesn't trigger any dealbreakers.
-
-    Checks venue name, categories, and address against dealbreaker keywords.
-    """
+def check_dealbreakers(venue: Venue, constraint_set: ConstraintSet) -> tuple[bool, float]:
+    """Check dealbreaker constraint. Returns (passed, penalty_multiplier)."""
     if not constraint_set.dealbreakers:
-        return True
+        return True, 1.0
 
     venue_text = " ".join([
         venue.name,
@@ -91,34 +105,54 @@ def check_dealbreakers(venue: Venue, constraint_set: ConstraintSet) -> bool:
     ]).lower()
 
     for dealbreaker in constraint_set.dealbreakers:
-        # Simple keyword matching — if the dealbreaker keyword appears
-        # in the venue description, it fails
         keywords = dealbreaker.lower().split()
         if all(kw in venue_text for kw in keywords):
-            return False
+            return False, DEALBREAKER_PENALTY
 
-    return True
+    return True, 1.0
 
 
-def passes_hard_constraints(venue: Venue, constraint_set: ConstraintSet) -> tuple[bool, list[str]]:
-    """Check all hard constraints. Returns (passed, list_of_violations)."""
+def check_hard_constraints(venue: Venue, constraint_set: ConstraintSet) -> tuple[float, list[str]]:
+    """Check all hard constraints. Returns (combined_penalty_multiplier, list_of_violations).
+
+    The multiplier is 1.0 if all constraints pass, < 1.0 if any are violated.
+    Violations are logged but no longer cause outright rejection.
+    """
     violations = []
+    combined_penalty = 1.0
 
-    if not check_budget(venue, constraint_set):
+    passed, penalty = check_budget(venue, constraint_set)
+    if not passed:
         violations.append(
             f"Over budget: venue is {venue.price_tier or '??'}, "
             f"group max is {constraint_set.budget_max}"
         )
+        combined_penalty *= penalty
 
-    if not check_dietary(venue, constraint_set):
+    passed, penalty = check_dietary(venue, constraint_set)
+    if not passed:
         violations.append(
-            f"Dietary conflict: group needs {', '.join(d.value for d in constraint_set.dietary_restrictions)}"
+            f"Dietary concern: group needs {', '.join(d.value for d in constraint_set.dietary_restrictions)}"
         )
+        combined_penalty *= penalty
 
-    if not check_dealbreakers(venue, constraint_set):
+    passed, penalty = check_dealbreakers(venue, constraint_set)
+    if not passed:
         violations.append("Matches a group dealbreaker")
+        combined_penalty *= penalty
 
-    return (len(violations) == 0, violations)
+    return combined_penalty, violations
+
+
+# Legacy API for backward compatibility
+def passes_hard_constraints(venue: Venue, constraint_set: ConstraintSet) -> tuple[bool, list[str]]:
+    """Check all hard constraints. Returns (passed, list_of_violations).
+
+    Now uses soft penalties internally but returns bool for backward compat.
+    A venue "passes" if the penalty multiplier is >= 0.5.
+    """
+    penalty, violations = check_hard_constraints(venue, constraint_set)
+    return (penalty >= 0.5, violations)
 
 
 # ── Soft constraint scorers ─────────────────────────────────────────
@@ -168,8 +202,6 @@ def score_popularity(venue: Venue) -> float:
     """Score based on review count (proxy for popularity). 0-1."""
     if venue.review_count is None:
         return 0.3  # unknown → below average
-    # Log scale: 0 reviews = 0, 10 = 0.3, 100 = 0.6, 1000+ = 1.0
-    import math
     if venue.review_count <= 0:
         return 0.0
     return min(1.0, math.log10(venue.review_count) / 3.0)
@@ -238,19 +270,13 @@ def score_venue(
 ) -> ScoredVenue:
     """Score a single venue against constraints and preferences.
 
-    Returns a ScoredVenue with score=0.0 if hard constraints are violated.
+    Hard constraint violations now apply a penalty multiplier instead of
+    rejecting outright, so we always return usable results.
     """
     w = weights or DEFAULT_WEIGHTS
 
-    # Check hard constraints first
-    passed, violations = passes_hard_constraints(venue, constraint_set)
-    if not passed:
-        return ScoredVenue(
-            venue=venue,
-            score=0.0,
-            score_breakdown={"hard_constraint_violations": 1.0},
-            explanation=f"❌ Rejected: {'; '.join(violations)}",
-        )
+    # Check hard constraints — get penalty multiplier
+    penalty_multiplier, violations = check_hard_constraints(venue, constraint_set)
 
     # Calculate soft constraint scores
     breakdown = {
@@ -267,7 +293,10 @@ def score_venue(
     if total_weight == 0:
         total_weight = 1.0
 
-    score = sum(breakdown[k] * w.get(k, 0) for k in breakdown) / total_weight
+    raw_score = sum(breakdown[k] * w.get(k, 0) for k in breakdown) / total_weight
+
+    # Apply hard constraint penalty
+    score = raw_score * penalty_multiplier
     score = round(max(0.0, min(1.0, score)), 3)
 
     # Build explanation
@@ -276,6 +305,8 @@ def score_venue(
     explanation = f"Score: {score:.0%}"
     if strengths:
         explanation += f" — Strong in: {', '.join(strengths)}"
+    if violations:
+        explanation += f" — ⚠️ {'; '.join(violations)}"
 
     return ScoredVenue(
         venue=venue,
@@ -291,12 +322,12 @@ def rank_venues(
     all_preferences: list[UserPreferences],
     weights: dict[str, float] | None = None,
 ) -> list[ScoredVenue]:
-    """Score and rank all venues. Rejected venues are at the bottom with score=0."""
+    """Score and rank all venues. All venues get a score — none are rejected outright."""
     scored = [
         score_venue(venue, constraint_set, all_preferences, weights)
         for venue in venues
     ]
 
-    # Sort: passing venues by score descending, then rejected ones
-    scored.sort(key=lambda sv: (-1 if sv.score > 0 else 0, -sv.score))
+    # Sort by score descending
+    scored.sort(key=lambda sv: -sv.score)
     return scored

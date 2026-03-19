@@ -80,66 +80,89 @@ class TestBudgetConstraint:
     def test_venue_within_budget(self):
         venue = _make_venue(price_tier=BudgetTier.LOW)
         cs = _make_constraints(budget_max=BudgetTier.MEDIUM)
-        assert check_budget(venue, cs) is True
+        passed, penalty = check_budget(venue, cs)
+        assert passed is True
+        assert penalty == 1.0
 
     def test_venue_at_budget(self):
         venue = _make_venue(price_tier=BudgetTier.MEDIUM)
         cs = _make_constraints(budget_max=BudgetTier.MEDIUM)
-        assert check_budget(venue, cs) is True
+        passed, penalty = check_budget(venue, cs)
+        assert passed is True
+        assert penalty == 1.0
 
     def test_venue_over_budget(self):
         venue = _make_venue(price_tier=BudgetTier.HIGH)
         cs = _make_constraints(budget_max=BudgetTier.MEDIUM)
-        assert check_budget(venue, cs) is False
+        passed, penalty = check_budget(venue, cs)
+        assert passed is False
+        assert penalty < 1.0  # score penalized but not zero
 
     def test_venue_no_price(self):
         venue = _make_venue(price_tier=None)
         cs = _make_constraints(budget_max=BudgetTier.MEDIUM)
-        assert check_budget(venue, cs) is True  # default assumes moderate
+        passed, penalty = check_budget(venue, cs)
+        assert passed is True  # default assumes moderate
 
 
 class TestDietaryConstraint:
     def test_no_restrictions(self):
         venue = _make_venue()
         cs = _make_constraints(dietary=[])
-        assert check_dietary(venue, cs) is True
+        passed, penalty = check_dietary(venue, cs)
+        assert passed is True
+        assert penalty == 1.0
 
     def test_non_food_venue_always_passes(self):
         venue = _make_venue(category=VenueCategory.ACTIVITY)
         cs = _make_constraints(dietary=[DietaryRestriction.VEGAN])
-        assert check_dietary(venue, cs) is True
+        passed, penalty = check_dietary(venue, cs)
+        assert passed is True
+        assert penalty == 1.0
 
     def test_food_venue_no_info_passes(self):
         venue = _make_venue(dietary_options=[])
         cs = _make_constraints(dietary=[DietaryRestriction.VEGETARIAN])
-        assert check_dietary(venue, cs) is True  # benefit of the doubt
+        passed, penalty = check_dietary(venue, cs)
+        assert passed is True  # benefit of the doubt
+        assert penalty == 1.0
 
     def test_food_venue_supports_dietary(self):
         venue = _make_venue(dietary_options=[DietaryRestriction.VEGETARIAN, DietaryRestriction.VEGAN])
         cs = _make_constraints(dietary=[DietaryRestriction.VEGETARIAN])
-        assert check_dietary(venue, cs) is True
+        passed, penalty = check_dietary(venue, cs)
+        assert passed is True
+        assert penalty == 1.0
 
     def test_food_venue_missing_dietary(self):
         venue = _make_venue(dietary_options=[DietaryRestriction.VEGETARIAN])
         cs = _make_constraints(dietary=[DietaryRestriction.VEGAN])
-        assert check_dietary(venue, cs) is False
+        passed, penalty = check_dietary(venue, cs)
+        assert passed is False
+        assert penalty < 1.0  # penalized but not zero
 
 
 class TestDealbreakers:
     def test_no_dealbreakers(self):
         venue = _make_venue()
         cs = _make_constraints(dealbreakers=[])
-        assert check_dealbreakers(venue, cs) is True
+        passed, penalty = check_dealbreakers(venue, cs)
+        assert passed is True
+        assert penalty == 1.0
 
     def test_matching_dealbreaker(self):
         venue = _make_venue(name="Loud Sports Bar", categories=["bar", "sports"])
         cs = _make_constraints(dealbreakers=["loud"])
-        assert check_dealbreakers(venue, cs) is False
+        passed, penalty = check_dealbreakers(venue, cs)
+        assert passed is False
+        assert penalty < 1.0  # penalized
 
     def test_non_matching_dealbreaker(self):
         venue = _make_venue(name="Quiet Italian Bistro")
         cs = _make_constraints(dealbreakers=["loud"])
-        assert check_dealbreakers(venue, cs) is True
+        passed, penalty = check_dealbreakers(venue, cs)
+        assert passed is True
+        assert penalty == 1.0
 
 
 class TestHardConstraints:
@@ -154,7 +177,7 @@ class TestHardConstraints:
         venue = _make_venue(price_tier=BudgetTier.LUXURY)
         cs = _make_constraints(budget_max=BudgetTier.LOW)
         passed, violations = passes_hard_constraints(venue, cs)
-        assert passed is False
+        # With soft penalties, venue still "passes" (penalty >= 0.5) but has violations logged
         assert len(violations) >= 1
 
 
@@ -242,12 +265,14 @@ class TestFullScoring:
         assert scored.score > 0
         assert "cuisine_match" in scored.score_breakdown
 
-    def test_score_venue_rejected(self):
+    def test_score_venue_penalized(self):
+        """Over-budget venues get penalized but still receive a non-zero score."""
         venue = _make_venue(price_tier=BudgetTier.LUXURY)
         cs = _make_constraints(budget_max=BudgetTier.LOW)
         scored = score_venue(venue, cs, [])
-        assert scored.score == 0.0
-        assert "❌" in scored.explanation
+        assert scored.score > 0.0  # no longer hard-rejected
+        assert scored.score < 0.5  # but significantly penalized
+        assert "⚠️" in scored.explanation
 
     def test_rank_venues(self):
         v1 = _make_venue(name="Italian Kitchen", categories=["italian"], rating=4.5, price_tier=BudgetTier.MEDIUM)
@@ -260,9 +285,9 @@ class TestFullScoring:
         ranked = rank_venues([v1, v2, v3], cs, prefs)
         assert len(ranked) == 3
 
-        # v3 should be rejected (over budget)
+        # v3 should be penalized (over budget) and rank last
         assert ranked[-1].venue.name == "Luxury Club"
-        assert ranked[-1].score == 0.0
+        assert ranked[-1].score < ranked[0].score  # lowest score
 
         # v1 should rank higher than v2 (cuisine match + higher rating)
         assert ranked[0].venue.name == "Italian Kitchen"
