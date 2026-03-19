@@ -42,7 +42,10 @@ async def search_venues(request: SearchRequest):
         )
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        tb = traceback.format_exc()
+        print(f"Search error: {tb}")
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
 @router.post("/recommend", response_model=RecommendationResult)
