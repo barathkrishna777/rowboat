@@ -345,8 +345,8 @@ def _register_orchestrator_tools(agent: Agent):
                 scored = direct_rank_venues(
                     ctx.deps.search_result.venues, constraint_set, preferences
                 )
-                ranked = [sv for sv in scored if sv.total_score > 0]
-                rejected = [sv for sv in scored if sv.total_score == 0]
+                ranked = [sv for sv in scored if sv.score > 0]
+                rejected = [sv for sv in scored if sv.score == 0]
                 result = RecommendationResult(
                     ranked_venues=ranked,
                     rejected_venues=rejected,
@@ -365,7 +365,7 @@ def _register_orchestrator_tools(agent: Agent):
                 "top_3": [
                     {
                         "name": sv.venue.name,
-                        "score": round(sv.total_score * 100),
+                        "score": round(sv.score * 100),
                         "explanation": sv.explanation,
                     }
                     for sv in result.ranked_venues[:3]
@@ -380,8 +380,8 @@ def _register_orchestrator_tools(agent: Agent):
                 scored = direct_rank_venues(
                     ctx.deps.search_result.venues, constraint_set, preferences
                 )
-                ranked = [sv for sv in scored if sv.total_score > 0]
-                rejected = [sv for sv in scored if sv.total_score == 0]
+                ranked = [sv for sv in scored if sv.score > 0]
+                rejected = [sv for sv in scored if sv.score == 0]
                 result = RecommendationResult(
                     ranked_venues=ranked,
                     rejected_venues=rejected,
@@ -392,7 +392,7 @@ def _register_orchestrator_tools(agent: Agent):
                 return {
                     "ranked_count": len(ranked),
                     "rejected_count": len(rejected),
-                    "top_3": [{"name": sv.venue.name, "score": round(sv.total_score * 100)} for sv in ranked[:3]],
+                    "top_3": [{"name": sv.venue.name, "score": round(sv.score * 100)} for sv in ranked[:3]],
                 }
             except Exception as e2:
                 ctx.deps.agent_log.append(f"[Recommend] Direct solver also failed: {e2}")
@@ -439,7 +439,7 @@ def _register_orchestrator_tools(agent: Agent):
                 "rating": v.rating,
                 "price_tier": v.price_tier,
                 "categories": [c.value for c in v.categories] if v.categories else [],
-                "score": round(best_venue.total_score * 100),
+                "score": round(best_venue.score * 100),
                 "explanation": best_venue.explanation,
             }
             result["cost_estimate"] = f"~${per_person}/person (${per_person * member_count} total)"
@@ -459,7 +459,7 @@ def _register_orchestrator_tools(agent: Agent):
                 f"Head to {v.name} ({v.address}) on "
                 f"{best_slot.get('day_name', '')} {best_slot.get('date', '')} "
                 f"from {best_slot.get('start_time', '')} to {best_slot.get('end_time', '')}. "
-                f"Score: {round(best_venue.total_score * 100)}% match. "
+                f"Score: {round(best_venue.score * 100)}% match. "
                 f"Estimated cost: {result['cost_estimate']}."
             )
 
@@ -637,8 +637,8 @@ async def _fallback_orchestration(
         if not rec_result.ranked_venues:
             plan.agent_log.append("[Recommend] LLM returned empty — using direct solver")
             scored = direct_rank_venues(result.venues, constraint_set, preferences)
-            ranked = [sv for sv in scored if sv.total_score > 0]
-            rejected = [sv for sv in scored if sv.total_score == 0]
+            ranked = [sv for sv in scored if sv.score > 0]
+            rejected = [sv for sv in scored if sv.score == 0]
             rec_result = RecommendationResult(
                 ranked_venues=ranked,
                 rejected_venues=rejected,
@@ -655,8 +655,8 @@ async def _fallback_orchestration(
         plan.agent_log.append(f"[Recommend] Agent failed ({e}), using direct solver")
         try:
             scored = direct_rank_venues(result.venues, constraint_set, preferences)
-            plan.ranked_venues = [sv for sv in scored if sv.total_score > 0]
-            plan.rejected_venues = [sv for sv in scored if sv.total_score == 0]
+            plan.ranked_venues = [sv for sv in scored if sv.score > 0]
+            plan.rejected_venues = [sv for sv in scored if sv.score == 0]
             plan.steps_completed.append("recommend")
             plan.agent_log.append(f"[Recommend] Direct solver: {len(plan.ranked_venues)} ranked")
         except Exception as e2:
@@ -677,7 +677,7 @@ async def _fallback_orchestration(
             "address": best_v.venue.address,
             "rating": best_v.venue.rating,
             "price_tier": best_v.venue.price_tier,
-            "score": round(best_v.total_score * 100),
+            "score": round(best_v.score * 100),
         }
         plan.recommended_slot = best_s
         plan.estimated_cost_per_person = f"~${pp}/person (${pp * n} total)"
@@ -685,7 +685,7 @@ async def _fallback_orchestration(
             f"Head to {best_v.venue.name} on "
             f"{best_s.get('day_name', '')} {best_s.get('date', '')} "
             f"from {best_s.get('start_time', '')} to {best_s.get('end_time', '')}. "
-            f"Match score: {round(best_v.total_score * 100)}%."
+            f"Match score: {round(best_v.score * 100)}%."
         )
         plan.steps_completed.append("itinerary")
         plan.agent_log.append(f"[Itinerary] {plan.itinerary_summary}")

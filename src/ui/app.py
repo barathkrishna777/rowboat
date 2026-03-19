@@ -369,7 +369,7 @@ if step == 0:
                     with st.expander(f"📊 All {len(ranked)} Ranked Venues"):
                         for i, sv in enumerate(ranked):
                             v = sv.get("venue", {})
-                            score = round(sv.get("total_score", 0) * 100)
+                            score = round(sv.get("score", 0) * 100)
                             score_color = "#1DB954" if score >= 70 else ("#FF690F" if score >= 40 else "#E53E3E")
                             cats = " · ".join(sv.get("venue", {}).get("categories", []))
                             st.markdown(f"""<div class="venue-card">
