@@ -6,8 +6,13 @@ import random
 import urllib.parse
 from datetime import datetime, timedelta, time as dt_time
 # from streamlit_sortables import sort_items  # replaced with custom card reorder
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 API_BASE = "http://localhost:8000/api"
+MAPS_EMBED_KEY = os.getenv("GOOGLE_MAPS_EMBED_KEY", "")
 
 # ── Page Config ────────────────────────────────────────────────────────
 
@@ -779,7 +784,7 @@ elif step == 4:
                 <div class="cal-header">📍 {venue_name}</div>
                 <iframe width="100%" height="250" style="border:0; border-radius:8px;"
                     loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"
-                    src="https://www.google.com/maps/embed/v1/search?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q={query_str}">
+                    src="https://www.google.com/maps/embed/v1/search?key={MAPS_EMBED_KEY}&q={query_str}">
                 </iframe>
                 <div class="venue-meta" style="margin-top:8px">{addr}</div>
             </div>""", unsafe_allow_html=True)
@@ -865,7 +870,7 @@ elif step == 5:
             <div class="cal-header">📍 Location</div>
             <iframe width="100%" height="220" style="border:0; border-radius:8px;"
                 loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"
-                src="https://www.google.com/maps/embed/v1/search?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q={query_str}">
+                src="https://www.google.com/maps/embed/v1/search?key={MAPS_EMBED_KEY}&q={query_str}">
             </iframe>
         </div>""", unsafe_allow_html=True)
 

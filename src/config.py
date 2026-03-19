@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     eventbrite_api_key: str = ""
     ticketmaster_api_key: str = ""
 
+    # Google Maps Embed
+    google_maps_embed_key: str = ""
+
     # Google Calendar OAuth
     google_client_id: str = ""
     google_client_secret: str = ""
