@@ -143,6 +143,8 @@ if "completed_steps" not in st.session_state:
     st.session_state.completed_steps = set()
 if "member_add_counter" not in st.session_state:
     st.session_state.member_add_counter = 0
+if "orchestrator_result" not in st.session_state:
+    st.session_state.orchestrator_result = None
 
 
 def advance_step():
@@ -247,6 +249,146 @@ if step == 0:
                     st.error(f"Error: {e}")
 
         st.divider()
+
+        if len(st.session_state.members) >= 2:
+            # ── Quick Plan (Orchestrator) ──
+            st.markdown("""<div style="background: linear-gradient(135deg, #FFF5ED, #FFF0E0);
+                border: 2px solid #FF690F; border-radius: 16px; padding: 24px; margin: 16px 0;">
+                <h3 style="margin:0 0 8px 0; color: #FF690F;">⚡ Quick Plan</h3>
+                <p style="margin:0; color: #6B7785; font-size: 14px;">
+                Let our AI orchestrator handle everything — just describe what you want and it'll find venues,
+                check availability, rank options, and build your itinerary in one shot.</p>
+            </div>""", unsafe_allow_html=True)
+
+            with st.form("quick_plan_form"):
+                quick_request = st.text_input(
+                    "What are you planning?",
+                    placeholder="e.g., Bowling night with dinner and drinks for the group",
+                )
+                qp_col1, qp_col2, qp_col3 = st.columns(3)
+                with qp_col1:
+                    qp_location = st.text_input("Location", value="Pittsburgh, PA")
+                with qp_col2:
+                    qp_date_start = st.date_input("From", value=datetime.today() + timedelta(days=1))
+                with qp_col3:
+                    qp_date_end = st.date_input("To", value=datetime.today() + timedelta(days=7))
+
+                qp_submit = st.form_submit_button("⚡ Plan It!", type="primary", use_container_width=True)
+
+                if qp_submit and quick_request:
+                    with st.spinner("🤖 Orchestrator working — coordinating Search, Calendar, and Recommendation agents..."):
+                        try:
+                            # Build preferences from session if available
+                            prefs_payload = []
+                            if st.session_state.get("preferences"):
+                                prefs_payload = [st.session_state["preferences"]]
+
+                            payload = {
+                                "request": quick_request,
+                                "group_name": st.session_state.get("group_name", "My Group"),
+                                "members": st.session_state.members,
+                                "preferences": prefs_payload,
+                                "location": qp_location,
+                                "date_range_start": qp_date_start.isoformat(),
+                                "date_range_end": qp_date_end.isoformat(),
+                                "earliest_time": "17:00",
+                                "latest_time": "23:00",
+                            }
+                            resp = httpx.post(f"{API_BASE}/plans/orchestrate", json=payload, timeout=120.0)
+                            resp.raise_for_status()
+                            st.session_state.orchestrator_result = resp.json()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Orchestrator failed: {e}")
+
+            # Show orchestrator results
+            if st.session_state.get("orchestrator_result"):
+                plan = st.session_state.orchestrator_result
+                st.markdown("---")
+                st.markdown("### 🎯 Orchestrator Results")
+
+                # Agent log (collapsible)
+                with st.expander("🤖 Agent Coordination Log", expanded=True):
+                    for log_entry in plan.get("agent_log", []):
+                        if "[Search]" in log_entry:
+                            st.markdown(f"🔍 {log_entry}")
+                        elif "[Calendar]" in log_entry:
+                            st.markdown(f"📅 {log_entry}")
+                        elif "[Recommend]" in log_entry:
+                            st.markdown(f"⭐ {log_entry}")
+                        elif "[Itinerary]" in log_entry:
+                            st.markdown(f"📋 {log_entry}")
+                        elif "[Parse]" in log_entry:
+                            st.markdown(f"🧠 {log_entry}")
+                        else:
+                            st.markdown(f"⚙️ {log_entry}")
+
+                # Recommended venue + slot
+                rec_venue = plan.get("recommended_venue")
+                rec_slot = plan.get("recommended_slot")
+                if rec_venue:
+                    st.markdown(f"""<div class="venue-card pref-1" style="margin-top:16px;">
+                        <div style="font-size:11px; color:#FF690F; font-weight:700; text-transform:uppercase; margin-bottom:4px;">
+                            ⚡ AI RECOMMENDED
+                        </div>
+                        <span class="rank-badge" style="background:#FFD700; color:#333;">★</span>
+                        <span class="venue-name" style="font-size:18px; font-weight:700;">{rec_venue.get('name','')}</span>
+                        <span class="venue-badge">{rec_venue.get('price_tier','$$')}</span><br>
+                        <span class="venue-meta">📍 {rec_venue.get('address','')}</span><br>
+                        <span class="venue-meta">⭐ {rec_venue.get('rating', 'N/A')} &nbsp;|&nbsp;
+                        Score: {rec_venue.get('score', 0)}% match</span><br>
+                        <span class="venue-meta">💰 {plan.get('estimated_cost_per_person', '')}</span>
+                    </div>""", unsafe_allow_html=True)
+
+                if rec_slot:
+                    slot_weekend = "🌴 Weekend" if rec_slot.get("is_weekend") else "💼 Weekday"
+                    st.markdown(f"""<div class="venue-card" style="margin-top:8px; border-left: 4px solid #1DB954;">
+                        <span class="venue-name">📅 {rec_slot.get('day', '')} {rec_slot.get('date', '')}</span>
+                        <span class="venue-badge">{slot_weekend}</span><br>
+                        <span class="venue-meta">🕐 {rec_slot.get('start_time', '')} – {rec_slot.get('end_time', '')}</span>
+                    </div>""", unsafe_allow_html=True)
+
+                # Summary
+                if plan.get("itinerary_summary"):
+                    st.success(f"📋 {plan['itinerary_summary']}")
+
+                # Stats
+                sc1, sc2, sc3, sc4 = st.columns(4)
+                with sc1:
+                    st.metric("Venues Found", plan.get("venues_found", 0))
+                with sc2:
+                    st.metric("Ranked", len(plan.get("ranked_venues", [])))
+                with sc3:
+                    st.metric("Rejected", len(plan.get("rejected_venues", [])))
+                with sc4:
+                    st.metric("Time Slots", len(plan.get("available_slots", [])))
+
+                # All ranked venues (collapsible)
+                ranked = plan.get("ranked_venues", [])
+                if ranked:
+                    with st.expander(f"📊 All {len(ranked)} Ranked Venues"):
+                        for i, sv in enumerate(ranked):
+                            v = sv.get("venue", {})
+                            score = round(sv.get("total_score", 0) * 100)
+                            score_color = "#1DB954" if score >= 70 else ("#FF690F" if score >= 40 else "#E53E3E")
+                            cats = " · ".join(sv.get("venue", {}).get("categories", []))
+                            st.markdown(f"""<div class="venue-card">
+                                <span class="rank-badge rank-other">{i+1}</span>
+                                <span class="venue-name">{v.get('name','')}</span>
+                                <span style="background:{score_color}; color:white; padding:2px 8px;
+                                    border-radius:12px; font-size:12px; font-weight:600;">{score}%</span>
+                                <span class="venue-badge">{v.get('price_tier','')}</span><br>
+                                <span class="venue-meta">📍 {v.get('address','')}</span><br>
+                                <span class="venue-meta">{cats}</span><br>
+                                <span class="venue-meta" style="color:#6B7785; font-style:italic;">
+                                    {sv.get('explanation','')}</span>
+                            </div>""", unsafe_allow_html=True)
+
+                # Option to continue with manual flow
+                st.divider()
+                st.caption("Want more control? Continue with the step-by-step flow below.")
+
+        # Manual continue button
         _, col2 = st.columns([3, 1])
         with col2:
             if len(st.session_state.members) >= 1:

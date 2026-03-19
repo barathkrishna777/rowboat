@@ -7,6 +7,9 @@ from fastapi import APIRouter, HTTPException
 
 from src.agents.search_agent import SearchResult, run_search
 from src.agents.recommendation_agent import RecommendationResult, run_recommendation
+from src.agents.orchestrator_agent import (
+    OrchestratorPlan, QuickPlanRequest, run_orchestrator,
+)
 from src.models.event import Venue
 from src.models.user import UserPreferences, BudgetTier, DietaryRestriction
 from src.models.constraints import ConstraintSet
@@ -93,3 +96,25 @@ async def recommend_venues(request: RecommendRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/orchestrate", response_model=OrchestratorPlan)
+async def orchestrate_outing(request: QuickPlanRequest):
+    """Plan an outing end-to-end using the Orchestrator Agent.
+
+    The orchestrator coordinates all sub-agents autonomously:
+    1. Parses the natural-language request
+    2. Searches for matching venues (Search Agent)
+    3. Finds available time slots (Calendar Agent)
+    4. Ranks venues against constraints (Recommendation Agent)
+    5. Builds a final itinerary
+
+    This is the "one-click planning" endpoint.
+    """
+    try:
+        plan = await run_orchestrator(request)
+        return plan
+    except Exception as e:
+        import traceback
+        print(f"Orchestrator error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
