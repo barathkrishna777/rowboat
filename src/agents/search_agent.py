@@ -151,30 +151,121 @@ def _register_search_tools(agent: Agent):
         return [v.model_dump(exclude_none=True) for v in venues]
 
 
+async def _search_source_safe(
+    name: str,
+    coro,
+    timeout: float = 12.0,
+) -> tuple[str, list[Venue]]:
+    """Run a single search source with its own timeout. Never raises."""
+    try:
+        venues = await asyncio.wait_for(coro, timeout=timeout)
+        return name, venues
+    except asyncio.TimeoutError:
+        return name, []
+    except Exception:
+        return name, []
+
+
+async def _run_parallel_search(
+    query: str,
+    location: str,
+    max_results: int = 10,
+    per_source_timeout: float = 12.0,
+) -> SearchResult:
+    """Run all search sources in parallel, returning whatever completes in time.
+
+    This bypasses the LLM agent and calls APIs directly, guaranteeing
+    partial results even if some sources are slow or fail.
+    """
+    loc = location or settings.default_location
+    city = loc.split(",")[0].strip()
+
+    # Launch all sources concurrently — each with its own timeout
+    tasks = [
+        _search_source_safe(
+            "Google Places",
+            search_google_places(query=query, location=loc, limit=max_results),
+            timeout=per_source_timeout,
+        ),
+        _search_source_safe(
+            "Yelp",
+            search_yelp(location=loc, term=query, limit=max_results),
+            timeout=per_source_timeout,
+        ),
+        _search_source_safe(
+            "Eventbrite",
+            search_eventbrite(location=loc, query=query, limit=max_results),
+            timeout=per_source_timeout,
+        ),
+        _search_source_safe(
+            "Ticketmaster",
+            search_ticketmaster(keyword=query, city=city, limit=max_results),
+            timeout=per_source_timeout,
+        ),
+    ]
+
+    results = await asyncio.gather(*tasks)
+
+    # Collect all venues and track which sources returned data
+    all_venues: list[Venue] = []
+    sources_searched: list[str] = []
+    for source_name, venues in results:
+        sources_searched.append(source_name)
+        all_venues.extend(venues)
+
+    # Deduplicate by name (case-insensitive)
+    seen_names: set[str] = set()
+    unique_venues: list[Venue] = []
+    for v in all_venues:
+        key = v.name.lower().strip()
+        if key not in seen_names:
+            seen_names.add(key)
+            unique_venues.append(v)
+
+    sources_with_results = [
+        name for name, venues in results if venues
+    ]
+
+    summary = (
+        f"Found {len(unique_venues)} unique venues from {', '.join(sources_with_results)}"
+        if sources_with_results
+        else "No venues found from any source."
+    )
+
+    return SearchResult(
+        venues=unique_venues,
+        summary=summary,
+        sources_searched=sources_searched,
+    )
+
+
 async def run_search(
     query: str,
     location: str = "",
     max_results: int = 10,
     timeout_seconds: float = 25.0,
 ) -> SearchResult:
-    """Convenience function to run the search agent with a timeout.
+    """Search for venues across all sources with a hard timeout guarantee.
+
+    Strategy:
+    1. Run all API sources in parallel (each with its own 12s timeout)
+    2. Collect whatever results come back within the overall timeout
+    3. Always return something — never return empty if any source responded
 
     Args:
         query: What to search for.
         location: Where to search.
         max_results: Max results per source.
-        timeout_seconds: Maximum time allowed for the search (default 25s).
+        timeout_seconds: Maximum total time allowed (default 25s).
     """
-    agent = get_search_agent()
-    deps = SearchDeps(location=location or settings.default_location, max_results_per_source=max_results)
     try:
         result = await asyncio.wait_for(
-            agent.run(query, deps=deps),
+            _run_parallel_search(query, location, max_results, per_source_timeout=12.0),
             timeout=timeout_seconds,
         )
-        return result.output
+        return result
     except asyncio.TimeoutError:
-        # Return whatever we might have — or an empty result with a note
+        # Even the parallel search hit the outer timeout — return what we can
         return SearchResult(
             venues=[],
             summary=f"Search timed out after {timeout_seconds}s. Try a simpler query.",
