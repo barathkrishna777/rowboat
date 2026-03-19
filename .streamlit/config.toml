@@ -11,6 +11,12 @@ headless = true
 enableCORS = false
 enableXsrfProtection = false
 enableWebsocketCompression = false
+runOnSave = false
+maxUploadSize = 5
+
+[client]
+showErrorDetails = false
+toolbarMode = "minimal"
 
 [browser]
 gatherUsageStats = false

@@ -1,2 +1,8 @@
 [build]
 builder = "nixpacks"
+
+[deploy]
+healthcheckPath = "/_stcore/health"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
