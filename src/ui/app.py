@@ -23,6 +23,18 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# ── WebSocket Keep-Alive (prevents Railway proxy from dropping connection) ──
+import streamlit.components.v1 as components
+components.html("""
+<script>
+(function keepAlive() {
+    setInterval(function() {
+        fetch(window.location.href, {method: 'HEAD', cache: 'no-store'}).catch(function(){});
+    }, 25000);
+})();
+</script>
+""", height=0)
+
 # ── Kayak-Inspired Theme ──────────────────────────────────────────────
 
 st.markdown("""
