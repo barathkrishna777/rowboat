@@ -33,10 +33,15 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     def sync_api_keys(self):
-        """Ensure GOOGLE_API_KEY is set for PydanticAI from either env var."""
-        key = self.google_api_key or self.gemini_api_key
+        """Ensure GOOGLE_API_KEY is set for PydanticAI from either env var.
+
+        Prefers GEMINI_API_KEY — on Railway GOOGLE_API_KEY may be stale.
+        """
+        key = self.gemini_api_key or self.google_api_key
         if key:
             os.environ["GOOGLE_API_KEY"] = key
+            # Also update the setting so all code paths use the correct key
+            self.google_api_key = key
 
 
 settings = Settings()

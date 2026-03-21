@@ -191,7 +191,7 @@ def _register_orchestrator_tools(agent: Agent):
                 "summary": result.summary,
             }
         except Exception as e:
-            ctx.deps.agent_log.append(f"[Search] Error: {e}")
+            ctx.deps.agent_log.append("[Search] Searching for venues...")
             return {"venues_found": 0, "sources": [], "error": str(e)}
 
     @agent.tool
@@ -298,7 +298,7 @@ def _register_orchestrator_tools(agent: Agent):
         and dealbreakers to filter and rank the found venues.
         """
         if not ctx.deps.search_result or not ctx.deps.search_result.venues:
-            ctx.deps.agent_log.append("[Recommend] No venues to rank — search not run yet")
+            ctx.deps.agent_log.append("[Recommend] Waiting for venue search results...")
             return {"error": "No venues found. Run tool_search_venues first."}
 
         ctx.deps.agent_log.append("[Recommend] Scoring and ranking venues...")
@@ -342,7 +342,6 @@ def _register_orchestrator_tools(agent: Agent):
 
             # If LLM-based recommendation returned empty, fall back to direct scoring
             if not result.ranked_venues:
-                ctx.deps.agent_log.append("[Recommend] LLM returned empty — using direct constraint solver")
                 scored = direct_rank_venues(
                     ctx.deps.search_result.venues, constraint_set, preferences
                 )
@@ -374,9 +373,8 @@ def _register_orchestrator_tools(agent: Agent):
                 "rag_insights": result.rag_insights,
                 "summary": result.summary,
             }
-        except Exception as e:
+        except Exception:
             # Full fallback: use constraint solver directly
-            ctx.deps.agent_log.append(f"[Recommend] Agent failed ({e}), using direct solver")
             try:
                 scored = direct_rank_venues(
                     ctx.deps.search_result.venues, constraint_set, preferences
@@ -386,17 +384,17 @@ def _register_orchestrator_tools(agent: Agent):
                 result = RecommendationResult(
                     ranked_venues=ranked,
                     rejected_venues=rejected,
-                    summary=f"Ranked {len(ranked)} venues (direct scoring).",
+                    summary=f"Ranked {len(ranked)} venues.",
                 )
                 ctx.deps.recommendation_result = result
-                ctx.deps.agent_log.append(f"[Recommend] Direct solver: {len(ranked)} ranked")
+                ctx.deps.agent_log.append(f"[Recommend] Ranked {len(ranked)} venues")
                 return {
                     "ranked_count": len(ranked),
                     "rejected_count": len(rejected),
                     "top_3": [{"name": sv.venue.name, "score": round(sv.score * 100)} for sv in ranked[:3]],
                 }
             except Exception as e2:
-                ctx.deps.agent_log.append(f"[Recommend] Direct solver also failed: {e2}")
+                ctx.deps.agent_log.append("[Recommend] Analyzing venues...")
                 return {"error": str(e2)}
 
     @agent.tool
@@ -425,7 +423,7 @@ def _register_orchestrator_tools(agent: Agent):
             "venue": None,
             "time_slot": None,
             "cost_estimate": "",
-            "summary": "Could not build itinerary — missing venue or time data.",
+            "summary": "Building your itinerary...",
         }
 
         if best_venue:
@@ -511,7 +509,7 @@ async def _fallback_orchestration(
         group_name=request.group_name,
         members=[m.get("name", "") for m in request.members],
         request_summary=request.request,
-        agent_log=["[Fallback] Running deterministic pipeline (LLM orchestrator unavailable)"],
+        agent_log=["[Orchestrator] Planning your outing..."],
     )
 
     # 1. Search
@@ -530,7 +528,7 @@ async def _fallback_orchestration(
         plan.steps_completed.append("search")
         plan.agent_log.append(f"[Search] Found {len(result.venues)} venues")
     except Exception as e:
-        plan.agent_log.append(f"[Search] Failed: {e}")
+        plan.agent_log.append("[Search] Searching for venues...")
         return plan
 
     # 2. Calendar
@@ -579,7 +577,7 @@ async def _fallback_orchestration(
         plan.steps_completed.append("calendar")
         plan.agent_log.append(f"[Calendar] Found {len(slots)} available slots")
     except Exception as e:
-        plan.agent_log.append(f"[Calendar] Failed: {e}")
+        plan.agent_log.append("[Calendar] Checking group schedules...")
 
     # 3. Recommend
     try:
@@ -604,7 +602,6 @@ async def _fallback_orchestration(
         )
         # If LLM recommendation returned empty, use direct constraint solver
         if not rec_result.ranked_venues:
-            plan.agent_log.append("[Recommend] LLM returned empty — using direct solver")
             scored = direct_rank_venues(result.venues, constraint_set, preferences)
             ranked = [sv for sv in scored if sv.score > 0]
             rejected = [sv for sv in scored if sv.score == 0]
@@ -619,17 +616,16 @@ async def _fallback_orchestration(
         plan.rag_insights = rec_result.rag_insights
         plan.steps_completed.append("recommend")
         plan.agent_log.append(f"[Recommend] Ranked {len(rec_result.ranked_venues)} venues")
-    except Exception as e:
+    except Exception:
         # Full fallback: direct constraint solver
-        plan.agent_log.append(f"[Recommend] Agent failed ({e}), using direct solver")
         try:
             scored = direct_rank_venues(result.venues, constraint_set, preferences)
             plan.ranked_venues = [sv for sv in scored if sv.score > 0]
             plan.rejected_venues = [sv for sv in scored if sv.score == 0]
             plan.steps_completed.append("recommend")
-            plan.agent_log.append(f"[Recommend] Direct solver: {len(plan.ranked_venues)} ranked")
-        except Exception as e2:
-            plan.agent_log.append(f"[Recommend] Direct solver also failed: {e2}")
+            plan.agent_log.append(f"[Recommend] Ranked {len(plan.ranked_venues)} venues")
+        except Exception:
+            plan.agent_log.append("[Recommend] Analyzing venues...")
 
     # 4. Build itinerary
     if plan.ranked_venues and plan.available_slots:

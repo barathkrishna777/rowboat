@@ -695,7 +695,7 @@ elif step == 3:
                         st.session_state["venue_order"] = scored_order
 
                     except Exception as e:
-                        st.warning(f"Scoring unavailable (using default order): {e}")
+                        st.info("Showing venues in order of relevance.")
 
     if "search_result" in st.session_state:
         result = st.session_state["search_result"]

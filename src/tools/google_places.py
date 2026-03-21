@@ -115,6 +115,8 @@ async def _search_via_gemini(query: str, location: str, limit: int) -> list[Venu
     """
     from google import genai
 
+    # Prefer GEMINI_API_KEY — on Railway, GOOGLE_API_KEY may be stale
+    api_key = settings.gemini_api_key or settings.google_api_key
     model = settings.primary_model.split(":")[-1]  # e.g., "gemini-2.5-flash"
 
     prompt = f"""Find {limit} real, currently operating venues for: "{query}" in {location}.
@@ -130,7 +132,7 @@ Return ONLY a valid JSON array. Each object must have these exact fields:
 
 Return the JSON array only, no markdown, no explanation."""
 
-    client = genai.Client()
+    client = genai.Client(api_key=api_key)
     response = await client.aio.models.generate_content(
         model=model,
         contents=prompt,
