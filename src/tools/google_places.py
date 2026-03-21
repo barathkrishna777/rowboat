@@ -110,14 +110,13 @@ async def _search_places_api(query: str, location: str, limit: int) -> list[Venu
 async def _search_via_gemini(query: str, location: str, limit: int) -> list[Venue]:
     """Use Gemini to generate real venue recommendations when Places API is unavailable.
 
-    Uses the google-genai SDK (same auth path as PydanticAI) instead of raw
-    httpx, which hangs on Railway due to API key / auth differences.
+    Uses raw httpx POST to the Gemini REST API for maximum speed and control.
+    Gemini 2.0 Flash Lite is used instead of 2.5 Flash because:
+    - This is a simple list-generation task (no reasoning needed)
+    - 2.0 Flash Lite responds in 2-5s vs 15-30s for 2.5 Flash
+    - Avoids the google-genai SDK's AFC overhead that causes hangs
     """
-    from google import genai
-
-    # Prefer GEMINI_API_KEY — on Railway, GOOGLE_API_KEY may be stale
     api_key = settings.gemini_api_key or settings.google_api_key
-    model = settings.primary_model.split(":")[-1]  # e.g., "gemini-2.5-flash"
 
     prompt = f"""Find {limit} real, currently operating venues for: "{query}" in {location}.
 
@@ -132,14 +131,20 @@ Return ONLY a valid JSON array. Each object must have these exact fields:
 
 Return the JSON array only, no markdown, no explanation."""
 
-    client = genai.Client(api_key=api_key)
-    response = await client.aio.models.generate_content(
-        model=model,
-        contents=prompt,
-        config=genai.types.GenerateContentConfig(temperature=0.3),
-    )
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={api_key}"
+    body = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.3},
+    }
 
-    text = response.text.strip()
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, json=body, timeout=20.0)
+        response.raise_for_status()
+        data = response.json()
+
+    text = data["candidates"][0]["content"]["parts"][0]["text"]
+
+    text = text.strip()
     # Strip markdown code fences if present
     if text.startswith("```"):
         text = text.split("\n", 1)[1]  # remove first line
