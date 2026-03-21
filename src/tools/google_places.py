@@ -108,8 +108,13 @@ async def _search_places_api(query: str, location: str, limit: int) -> list[Venu
 
 
 async def _search_via_gemini(query: str, location: str, limit: int) -> list[Venue]:
-    """Use Gemini to generate real venue recommendations when Places API is unavailable."""
-    api_key = settings.google_api_key or settings.gemini_api_key
+    """Use Gemini to generate real venue recommendations when Places API is unavailable.
+
+    Uses the google-genai SDK (same auth path as PydanticAI) instead of raw
+    httpx, which hangs on Railway due to API key / auth differences.
+    """
+    from google import genai
+
     model = settings.primary_model.split(":")[-1]  # e.g., "gemini-2.5-flash"
 
     prompt = f"""Find {limit} real, currently operating venues for: "{query}" in {location}.
@@ -125,20 +130,15 @@ Return ONLY a valid JSON array. Each object must have these exact fields:
 
 Return the JSON array only, no markdown, no explanation."""
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-    body = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3},
-    }
+    client = genai.Client()
+    response = await client.aio.models.generate_content(
+        model=model,
+        contents=prompt,
+        config=genai.types.GenerateContentConfig(temperature=0.3),
+    )
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(url, json=body, timeout=30.0)
-        resp.raise_for_status()
-        data = resp.json()
-
-    text = data["candidates"][0]["content"]["parts"][0]["text"]
+    text = response.text.strip()
     # Strip markdown code fences if present
-    text = text.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[1]  # remove first line
         text = text.rsplit("```", 1)[0]  # remove last fence
