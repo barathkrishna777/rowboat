@@ -491,48 +491,11 @@ async def run_orchestrator(request: QuickPlanRequest) -> OrchestratorPlan:
         preferences=preferences,
     )
 
-    try:
-        agent = get_orchestrator_agent()
-        prompt = (
-            f"Plan this outing: {request.request}\n"
-            f"Group: {request.group_name or 'Unnamed Group'}\n"
-            f"Members: {', '.join(m.get('name', '?') for m in request.members)}\n"
-            f"Location: {request.location}\n"
-            f"Date range: {request.date_range_start or 'flexible'} to {request.date_range_end or 'flexible'}\n"
-            f"Time window: {request.earliest_time} - {request.latest_time}\n"
-            f"Preferences provided: {len(preferences)} member(s)\n"
-            "\nCall all tools in order: parse → search → calendar → rank → build itinerary."
-            "\nIMPORTANT: Be fast. Do not overthink. Call each tool ONCE and move on."
-        )
-        # Timeout: give the LLM orchestrator 50s max, then fall back to deterministic
-        result = await asyncio.wait_for(
-            agent.run(prompt, deps=deps),
-            timeout=50.0,
-        )
-        plan = result.output
-
-        # Enrich with data from deps (in case LLM missed some fields)
-        plan.agent_log = deps.agent_log
-        plan.members = [m.get("name", "") for m in request.members]
-        plan.group_name = request.group_name
-
-        if deps.search_result:
-            plan.venues_found = len(deps.search_result.venues)
-            plan.venues_searched_sources = deps.search_result.sources_searched
-
-        if deps.recommendation_result:
-            plan.ranked_venues = deps.recommendation_result.ranked_venues
-            plan.rejected_venues = deps.recommendation_result.rejected_venues
-            plan.rag_insights = deps.recommendation_result.rag_insights
-
-        if deps.available_slots:
-            plan.available_slots = deps.available_slots
-
-        return plan
-
-    except Exception as e:
-        # Fallback: run the pipeline deterministically without the LLM orchestrator
-        return await _fallback_orchestration(request, preferences, deps)
+    # Use the deterministic pipeline directly — it runs search, calendar,
+    # recommendation, and itinerary in sequence without an extra LLM layer.
+    # This avoids Gemini API contention (the LLM orchestrator's own calls
+    # compete with the search agent's Gemini calls, causing timeouts).
+    return await _fallback_orchestration(request, preferences, deps)
 
 
 async def _fallback_orchestration(
@@ -678,11 +641,12 @@ async def _fallback_orchestration(
         pp = price_map.get(best_v.venue.price_tier or "$$", 25)
         n = len(request.members) or 1
 
+        tier = best_v.venue.price_tier
         plan.recommended_venue = {
             "name": best_v.venue.name,
             "address": best_v.venue.address,
             "rating": best_v.venue.rating,
-            "price_tier": best_v.venue.price_tier,
+            "price_tier": tier.value if tier else "$$",
             "score": round(best_v.score * 100),
         }
         plan.recommended_slot = best_s

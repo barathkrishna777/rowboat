@@ -16,7 +16,7 @@ from pydantic_ai import Agent, RunContext
 from src.config import settings
 from src.models.event import Venue
 from src.tools.eventbrite import search_eventbrite
-from src.tools.google_places import search_google_places, _search_via_gemini
+from src.tools.google_places import search_google_places, _search_places_api, _search_via_gemini
 from src.tools.ticketmaster import search_ticketmaster
 from src.tools.yelp import get_yelp_reviews, search_yelp
 
@@ -158,6 +158,14 @@ def _register_search_tools(agent: Agent):
         return [v.model_dump(exclude_none=True) for v in venues]
 
 
+async def _search_places_api_safe(query: str, location: str, limit: int) -> list[Venue]:
+    """Try only the Places API (no Gemini fallback). Returns [] on any error."""
+    try:
+        return await _search_places_api(query, location, limit)
+    except Exception:
+        return []
+
+
 async def _search_source_safe(
     name: str,
     coro,
@@ -194,13 +202,19 @@ async def _run_parallel_search(
     loc = location or settings.default_location
     city = loc.split(",")[0].strip()
 
-    # Launch all sources concurrently
-    # Google Places gets extra time: Places API (~2s) + Gemini fallback (~10-15s)
+    # Launch ALL sources concurrently — including Gemini LLM as a first-class
+    # source, not a sequential fallback.  This way if Places API returns 403
+    # (common), Gemini results are already being fetched in parallel.
     tasks = [
         _search_source_safe(
             "Google Places",
-            search_google_places(query=query, location=loc, limit=max_results),
-            timeout=22.0,
+            _search_places_api_safe(query, loc, max_results),
+            timeout=10.0,
+        ),
+        _search_source_safe(
+            "Gemini LLM",
+            _search_via_gemini(query, loc, max_results),
+            timeout=30.0,
         ),
         _search_source_safe(
             "Yelp",
@@ -237,25 +251,7 @@ async def _run_parallel_search(
             seen_names.add(key)
             unique_venues.append(v)
 
-    sources_with_results = [
-        name for name, venues in results if venues
-    ]
-
-    # If ALL sources returned empty, use Gemini LLM as a guaranteed last resort
-    # This gets a generous 25s timeout — it's our safety net
-    if not unique_venues:
-        logger.info("[Search] All API sources returned empty — falling back to Gemini LLM")
-        try:
-            gemini_venues = await asyncio.wait_for(
-                _search_via_gemini(query, loc, max_results),
-                timeout=25.0,
-            )
-            unique_venues = gemini_venues
-            sources_searched.append("Gemini LLM")
-            sources_with_results.append("Gemini LLM")
-            logger.info(f"[Search] Gemini fallback returned {len(gemini_venues)} venues")
-        except Exception as e:
-            logger.warning(f"[Search] Gemini fallback also failed: {type(e).__name__}: {e}")
+    sources_with_results = [name for name, venues in results if venues]
 
     summary = (
         f"Found {len(unique_venues)} unique venues from {', '.join(sources_with_results)}"
@@ -279,16 +275,16 @@ async def run_search(
     """Search for venues across all sources with a hard timeout guarantee.
 
     Strategy:
-    1. Run all API sources in parallel — Google Places gets 22s (it does
-       Places API + Gemini fallback sequentially), others get 10s
-    2. If ALL sources return empty, try a dedicated Gemini LLM call (25s)
-    3. Overall hard cap at 35s
+    1. Run 5 sources in parallel: Places API, Gemini LLM, Yelp, Eventbrite, Ticketmaster
+    2. Gemini LLM runs as a first-class source (not a sequential fallback)
+       so results come back fast even when Places API returns 403
+    3. Overall hard cap at 35s (Gemini 2.5 Flash can take 20-30s on cold starts)
 
     Args:
         query: What to search for.
         location: Where to search.
         max_results: Max results per source.
-        timeout_seconds: Maximum total time allowed (default 35s).
+        timeout_seconds: Maximum total time allowed (default 25s).
     """
     try:
         result = await asyncio.wait_for(
