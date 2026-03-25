@@ -264,6 +264,8 @@ def _register_orchestrator_tools(agent: Agent):
                 "day_name": s.start.strftime("%A"),
                 "start_time": s.start.strftime("%I:%M %p"),
                 "end_time": s.end.strftime("%I:%M %p"),
+                "start_iso": s.start.isoformat(),
+                "end_iso": s.end.isoformat(),
                 "duration_hours": (s.end - s.start).total_seconds() / 3600,
                 "is_weekend": s.start.weekday() >= 5,
             })
@@ -570,6 +572,8 @@ async def _fallback_orchestration(
                 "day_name": s.start.strftime("%A"),
                 "start_time": s.start.strftime("%I:%M %p"),
                 "end_time": s.end.strftime("%I:%M %p"),
+                "start_iso": s.start.isoformat(),
+                "end_iso": s.end.isoformat(),
                 "duration_hours": (s.end - s.start).total_seconds() / 3600,
                 "is_weekend": s.start.weekday() >= 5,
             })

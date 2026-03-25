@@ -1,6 +1,10 @@
-"""Page 3: Connect Google Calendar for availability."""
+"""Page 3: Connect Google Calendar for real availability."""
 
 import streamlit as st
+import httpx
+import os
+
+API_BASE = os.environ.get("API_BASE", "http://localhost:8000")
 
 st.header("Step 3: Connect Google Calendar")
 
@@ -20,7 +24,19 @@ st.markdown(
     """
 )
 
-# For MVP without real OAuth, simulate calendar connection
+# Check for OAuth callback success
+params = st.query_params
+if params.get("calendar_connected") == "true":
+    connected_user_id = params.get("user_id", "")
+    if connected_user_id:
+        if "calendars_connected" not in st.session_state:
+            st.session_state.calendars_connected = {}
+        st.session_state.calendars_connected[connected_user_id] = True
+        st.success("Google Calendar connected successfully!")
+        # Clear the query params
+        st.query_params.clear()
+
+# Calendar connection status
 st.subheader("Calendar Connection Status")
 
 if "calendars_connected" not in st.session_state:
@@ -32,21 +48,30 @@ if not members:
     st.stop()
 
 for member in members:
-    name = member["name"]
-    connected = st.session_state.calendars_connected.get(name, False)
+    name = member.get("name", "")
+    user_id = member.get("user_id", "")
+    connected = st.session_state.calendars_connected.get(user_id, False)
 
     col1, col2 = st.columns([3, 1])
     with col1:
         if connected:
-            st.success(f"{name} — Calendar connected")
+            st.success(f"**{name}** — Calendar connected")
         else:
-            st.warning(f"{name} — Not connected")
+            st.warning(f"**{name}** — Not connected")
     with col2:
-        if not connected:
-            if st.button(f"Connect", key=f"connect_{name}"):
-                # In production, this would redirect to Google OAuth
-                st.session_state.calendars_connected[name] = True
-                st.rerun()
+        if not connected and user_id:
+            if st.button("Connect", key=f"connect_{user_id}"):
+                try:
+                    resp = httpx.get(
+                        f"{API_BASE}/api/calendar/auth-url",
+                        params={"user_id": user_id},
+                        timeout=10.0,
+                    )
+                    resp.raise_for_status()
+                    auth_url = resp.json()["auth_url"]
+                    st.markdown(f'<meta http-equiv="refresh" content="0;url={auth_url}">', unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"Could not start OAuth: {e}")
 
 st.divider()
 
@@ -55,8 +80,7 @@ st.subheader("Find Group Availability")
 
 connected_count = sum(1 for v in st.session_state.calendars_connected.values() if v)
 if connected_count == 0:
-    st.info("Connect at least one calendar to search for availability.")
-    st.stop()
+    st.info("Connect at least one calendar to search for real availability, or proceed with simulated schedules.")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -66,43 +90,50 @@ with col2:
 
 min_hours = st.slider("Minimum outing duration (hours)", 1, 6, 2)
 
-if st.button("Find Available Times"):
-    # For MVP, generate simulated availability
-    from datetime import datetime, timedelta
+if st.button("Find Available Times", type="primary"):
+    user_ids = [m.get("user_id", "") for m in members if m.get("user_id")]
+    if not user_ids:
+        st.warning("No members with IDs found.")
+        st.stop()
 
-    st.session_state["available_slots"] = []
-    current = datetime.combine(start_date, datetime.min.time().replace(hour=17))
-    end = datetime.combine(end_date, datetime.min.time().replace(hour=23))
+    with st.spinner("Checking calendars..."):
+        try:
+            resp = httpx.post(
+                f"{API_BASE}/api/calendar/availability",
+                json={
+                    "user_ids": user_ids,
+                    "start_date": start_date.isoformat(),
+                    "end_date": end_date.isoformat(),
+                    "min_duration_hours": min_hours,
+                },
+                timeout=30.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
-    while current < end:
-        # Simulate some available evening slots
-        if current.weekday() < 5:  # Weekdays
-            slot_start = current.replace(hour=18)
-            slot_end = current.replace(hour=22)
-        else:  # Weekends
-            slot_start = current.replace(hour=12)
-            slot_end = current.replace(hour=22)
+            st.session_state["available_slots"] = data["slots"]
 
-        st.session_state["available_slots"].append({
-            "start": slot_start.isoformat(),
-            "end": slot_end.isoformat(),
-            "available_users": [m["name"] for m in members],
-        })
-        current += timedelta(days=1)
+            if data.get("connected_users"):
+                st.success(f"Real calendar data from: {', '.join(data['connected_users'])}")
+            if data.get("simulated_users"):
+                st.info(f"Assumed always free (no calendar): {', '.join(data['simulated_users'])}")
 
-    st.success(f"Found {len(st.session_state['available_slots'])} available time slots!")
+            st.success(f"Found {data['total']} available time slots!")
+        except Exception as e:
+            st.error(f"Failed to check availability: {e}")
 
 # Display found slots
 if "available_slots" in st.session_state:
     slots = st.session_state["available_slots"]
-    for i, slot in enumerate(slots):
-        from datetime import datetime as dt
+    if not slots:
+        st.info("No available slots found in that date range.")
+    for slot in slots:
+        day_name = slot.get("day_name", "")
+        date_str = slot.get("date", "")
+        start_time = slot.get("start_time", "")
+        end_time = slot.get("end_time", "")
+        duration = slot.get("duration_hours", 0)
+        is_weekend = slot.get("is_weekend", False)
 
-        start = dt.fromisoformat(slot["start"])
-        end = dt.fromisoformat(slot["end"])
-        duration = (end - start).total_seconds() / 3600
-
-        day_name = start.strftime("%A, %B %d")
-        time_range = f"{start.strftime('%I:%M %p')} - {end.strftime('%I:%M %p')}"
-
-        st.write(f"**{day_name}**: {time_range} ({duration:.0f}h) — {', '.join(slot['available_users'])}")
+        badge = " 🎉 Weekend" if is_weekend else ""
+        st.write(f"**{day_name}, {date_str}**: {start_time} – {end_time} ({duration:.0f}h){badge}")

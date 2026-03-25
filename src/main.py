@@ -59,8 +59,10 @@ async def _warmup_gemini():
 
 
 @app.on_event("startup")
-async def startup_warmup():
-    """Fire-and-forget warmup so the first real search isn't a cold start."""
+async def startup():
+    """Initialize DB and warm up Gemini on startup."""
+    from src.db.database import init_db
+    await init_db()
     asyncio.create_task(_warmup_gemini())
 
 

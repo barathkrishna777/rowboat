@@ -17,31 +17,41 @@ SCOPES = [
     "https://www.googleapis.com/auth/calendar.events",
 ]
 
-REDIRECT_URI = "http://localhost:8000/api/calendar/callback"
+def _get_redirect_uri() -> str:
+    """Return the OAuth redirect URI based on environment."""
+    import os
+    base = os.environ.get("API_BASE_URL", "http://localhost:8000")
+    return f"{base}/api/calendar/callback"
 
 
 def get_oauth_flow() -> Flow:
     """Create a Google OAuth2 flow for Calendar access."""
+    redirect_uri = _get_redirect_uri()
     client_config = {
         "web": {
             "client_id": settings.google_client_id,
             "client_secret": settings.google_client_secret,
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [REDIRECT_URI],
+            "redirect_uris": [redirect_uri],
         }
     }
-    flow = Flow.from_client_config(client_config, scopes=SCOPES, redirect_uri=REDIRECT_URI)
+    flow = Flow.from_client_config(client_config, scopes=SCOPES, redirect_uri=redirect_uri)
     return flow
 
 
-def get_auth_url() -> str:
-    """Get the Google OAuth2 authorization URL."""
+def get_auth_url(state: str = "") -> str:
+    """Get the Google OAuth2 authorization URL.
+
+    Args:
+        state: Opaque string passed through the OAuth flow (e.g. user_id).
+    """
     flow = get_oauth_flow()
     auth_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
+        state=state or "default",
     )
     return auth_url
 
