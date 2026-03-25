@@ -248,6 +248,17 @@ if step == 0:
                 except Exception as e:
                     st.error(f"Error: {e}")
 
+        # Mini calendar status
+        calendars_connected = st.session_state.get("calendars_connected", {})
+        if calendars_connected and any(calendars_connected.values()):
+            with st.expander("📅 Calendar Status", expanded=False):
+                for m in st.session_state.members:
+                    uid = m.get("user_id", "")
+                    connected = calendars_connected.get(uid, False)
+                    icon = "🟢" if connected else "⚪"
+                    status = "Connected" if connected else "Not connected"
+                    st.caption(f"{icon} **{m['name']}** — {status}")
+
         st.divider()
 
         if len(st.session_state.members) >= 2:
@@ -384,15 +395,29 @@ if step == 0:
                                     {sv.get('explanation','')}</span>
                             </div>""", unsafe_allow_html=True)
 
+                # Accept & Book button
+                if rec_venue and rec_slot:
+                    st.divider()
+                    bc1, bc2 = st.columns([1, 1])
+                    with bc1:
+                        if st.button("✅ Accept & Book This Plan", type="primary", use_container_width=True):
+                            # Store the accepted plan and jump to booking step
+                            st.session_state["accepted_plan"] = plan
+                            st.session_state.current_step = 5  # Booking Summary step
+                            st.session_state.completed_steps.update({0, 1, 2, 3, 4})
+                            st.rerun()
+                    with bc2:
+                        st.caption("This will create a Google Calendar event and send invites to all group members.")
+
                 # Option to continue with manual flow
                 st.divider()
-                st.caption("Want more control? Continue with the step-by-step flow below.")
+                st.caption("Want more control? Customize your plan step-by-step below.")
 
         # Manual continue button
         _, col2 = st.columns([3, 1])
         with col2:
             if len(st.session_state.members) >= 1:
-                if st.button("Continue →", type="primary", use_container_width=True):
+                if st.button("Customize Step-by-Step →", type="primary", use_container_width=True):
                     advance_step()
                     st.rerun()
 
@@ -1080,42 +1105,80 @@ elif step == 4:
 # STEP 5: BOOKING SUMMARY
 # ════════════════════════════════════════════════════════════════════════
 elif step == 5:
-    st.markdown('<div class="section-card"><div class="section-title">🎉 Booking Confirmed!</div>'
-                '<div class="section-subtitle">Here\'s a summary of your group outing reservation</div></div>',
-                unsafe_allow_html=True)
-
+    accepted_plan = st.session_state.get("accepted_plan")
     booked_item = st.session_state.get("booked_item", {})
-    booked_members = st.session_state.get("booked_members", [])
-    cost_per_person = st.session_state.get("booked_total_cost", 0)
+    already_booked = st.session_state.get("booking_confirmed", False)
 
-    st.success("Calendar invites have been sent to all group members!")
+    members = st.session_state.get("members", [])
+    member_names = [m["name"] for m in members]
+    creator_user_id = st.session_state.get("creator_user_id", "")
+    organizer_connected = st.session_state.get("calendars_connected", {}).get(creator_user_id, False)
+
+    # Determine venue/slot from either accepted plan or manual flow
+    venue = None
+    slot = None
+    slot_str = ""
+    cost_per_person = 0
+    start_iso = ""
+    end_iso = ""
+
+    if accepted_plan:
+        venue = accepted_plan.get("recommended_venue", {})
+        slot = accepted_plan.get("recommended_slot", {})
+        slot_str = f"{slot.get('day', '')} {slot.get('date', '')} — {slot.get('start_time', '')} to {slot.get('end_time', '')}"
+        start_iso = slot.get("start_iso", "")
+        end_iso = slot.get("end_iso", "")
+        cost_str = accepted_plan.get("estimated_cost_per_person", "")
+        # Parse cost string like "~$25/person" to number
+        import re
+        cost_match = re.search(r"\$(\d+)", str(cost_str))
+        cost_per_person = int(cost_match.group(1)) if cost_match else 0
+    elif booked_item:
+        venue = booked_item.get("venue", {})
+        slot = booked_item.get("slot", {})
+        slot_str = booked_item.get("slot_str", "")
+        cost_per_person = st.session_state.get("booked_total_cost", 0)
+
+    if not venue:
+        st.warning("No plan selected. Go back and generate a plan first.")
+        st.stop()
+
+    # Header depends on booking state
+    if already_booked:
+        st.markdown('<div class="section-card"><div class="section-title">🎉 Booking Confirmed!</div>'
+                    '<div class="section-subtitle">Here\'s a summary of your group outing reservation</div></div>',
+                    unsafe_allow_html=True)
+        st.success("Calendar invites have been sent to all group members!")
+    else:
+        st.markdown('<div class="section-card"><div class="section-title">📋 Review & Book</div>'
+                    '<div class="section-subtitle">Confirm your outing details and send calendar invites</div></div>',
+                    unsafe_allow_html=True)
 
     # Group info
-    members_html = "".join(f'<span class="member-chip"><span class="dot"></span>{m}</span>' for m in booked_members)
+    members_html = "".join(f'<span class="member-chip"><span class="dot"></span>{m}</span>' for m in member_names)
     st.markdown(f"**Group:** {members_html}", unsafe_allow_html=True)
 
     st.divider()
     st.subheader("📋 Reservation Details")
 
-    if booked_item:
-        v = booked_item["venue"]
-        cats = v.get("categories", [])
-        badges = "".join(f'<span class="venue-badge">{c}</span>' for c in cats[:3])
-        price_html = f'<span class="price-badge">{v.get("price_tier","")}</span>' if v.get("price_tier") else ""
-        rating_stars = f"{'⭐' * int(v.get('rating', 0))}" if v.get("rating") else ""
+    cats = venue.get("categories", [])
+    badges = "".join(f'<span class="venue-badge">{c}</span>' for c in cats[:3])
+    price_html = f'<span class="price-badge">{venue.get("price_tier","")}</span>' if venue.get("price_tier") else ""
+    rating_stars = f"{'⭐' * int(venue.get('rating', 0))}" if venue.get("rating") else ""
 
-        st.markdown(f"""<div class="venue-card selected" style="border-width:2px;">
-            <span class="venue-name" style="font-size:22px;">{v['name']}</span> {price_html}<br>
-            <span class="venue-meta" style="font-size:15px;">📍 {v.get('address', 'Address TBD')}</span><br>
-            <span class="venue-meta" style="font-size:15px;">🕐 {booked_item['slot_str']}</span><br>
-            <span class="venue-meta">{rating_stars}</span><br>
-            {badges}
-        </div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="venue-card selected" style="border-width:2px;">
+        <span class="venue-name" style="font-size:22px;">{venue.get('name', 'Venue')}</span> {price_html}<br>
+        <span class="venue-meta" style="font-size:15px;">📍 {venue.get('address', 'Address TBD')}</span><br>
+        <span class="venue-meta" style="font-size:15px;">🕐 {slot_str}</span><br>
+        <span class="venue-meta">{rating_stars}</span><br>
+        {badges}
+    </div>""", unsafe_allow_html=True)
 
-        # Google Maps embed for the booked venue
-        addr = v.get("address", "")
-        venue_name = v.get("name", "")
-        query_str = urllib.parse.quote(f"{venue_name}, {addr}")
+    # Google Maps embed for the venue
+    addr = venue.get("address", "")
+    venue_name = venue.get("name", "")
+    query_str = urllib.parse.quote(f"{venue_name}, {addr}")
+    if MAPS_EMBED_KEY:
         st.markdown(f"""<div class="cal-overlay">
             <div class="cal-header">📍 Location</div>
             <iframe width="100%" height="220" style="border:0; border-radius:8px;"
@@ -1127,28 +1190,86 @@ elif step == 5:
     st.divider()
 
     # Cost summary
-    n_members = len(booked_members)
-    st.markdown(f"""
-    <div class="section-card" style="background: #FFF9F5; border-color: #FF690F;">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div>
-                <div style="font-size:14px; color:#6B7785;">Estimated cost per person</div>
-                <div style="font-size:28px; font-weight:700; color:#FF690F;">~${cost_per_person}</div>
-            </div>
-            <div>
-                <div style="font-size:14px; color:#6B7785;">Group total ({n_members} people)</div>
-                <div style="font-size:28px; font-weight:700; color:#192024;">~${cost_per_person * n_members}</div>
+    n_members = len(member_names)
+    if cost_per_person > 0:
+        st.markdown(f"""
+        <div class="section-card" style="background: #FFF9F5; border-color: #FF690F;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div style="font-size:14px; color:#6B7785;">Estimated cost per person</div>
+                    <div style="font-size:28px; font-weight:700; color:#FF690F;">~${cost_per_person}</div>
+                </div>
+                <div>
+                    <div style="font-size:14px; color:#6B7785;">Group total ({n_members} people)</div>
+                    <div style="font-size:28px; font-weight:700; color:#192024;">~${cost_per_person * n_members}</div>
+                </div>
             </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+        st.divider()
+
+    # Booking action
+    if not already_booked:
+        attendee_emails = [m.get("email", "") for m in members if m.get("email")]
+        attendee_emails = [e for e in attendee_emails if e]
+
+        if attendee_emails:
+            st.caption(f"Calendar invites will be sent to: {', '.join(attendee_emails)}")
+
+        bc1, bc2 = st.columns(2)
+        with bc1:
+            if organizer_connected and start_iso and end_iso:
+                if st.button("📅 Book & Send Calendar Invites", type="primary", use_container_width=True):
+                    with st.spinner("Creating calendar event..."):
+                        try:
+                            api_base = API_BASE.replace("/api", "")
+                            resp = httpx.post(
+                                f"{api_base}/api/calendar/book",
+                                json={
+                                    "organizer_user_id": creator_user_id,
+                                    "group_id": st.session_state.get("group_id", ""),
+                                    "venue_name": venue.get("name", ""),
+                                    "venue_address": venue.get("address", ""),
+                                    "start_time": start_iso,
+                                    "end_time": end_iso,
+                                    "attendee_emails": attendee_emails,
+                                },
+                                timeout=30.0,
+                            )
+                            resp.raise_for_status()
+                            result = resp.json()
+
+                            st.session_state["booking_confirmed"] = True
+                            st.balloons()
+                            st.success(result.get("message", "Booked!"))
+                            if result.get("calendar_link"):
+                                st.markdown(f"[Open in Google Calendar]({result['calendar_link']})")
+                            st.rerun()
+                        except httpx.HTTPStatusError as e:
+                            detail = e.response.json().get("detail", str(e))
+                            st.error(f"Booking failed: {detail}")
+                        except Exception as e:
+                            st.error(f"Booking failed: {e}")
+            else:
+                if st.button("✅ Confirm Booking", type="primary", use_container_width=True):
+                    st.session_state["booking_confirmed"] = True
+                    st.balloons()
+                    st.success("Itinerary booked!")
+                    if not organizer_connected:
+                        st.info("Connect your Google Calendar to also send calendar invites.")
+                    st.rerun()
+        with bc2:
+            if st.button("← Back to Plan", use_container_width=True):
+                st.session_state.current_step = 0
+                st.rerun()
 
     st.divider()
     _, col2 = st.columns([3, 1])
     with col2:
-        if st.button("Continue to Feedback →", type="primary", key="summary_continue", use_container_width=True):
-            advance_step()
-            st.rerun()
+        if already_booked:
+            if st.button("Continue to Feedback →", type="primary", key="summary_continue", use_container_width=True):
+                advance_step()
+                st.rerun()
 
 
 # ════════════════════════════════════════════════════════════════════════
