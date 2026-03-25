@@ -107,17 +107,12 @@ async def _search_places_api(query: str, location: str, limit: int) -> list[Venu
     return [_place_to_venue(p) for p in data.get("places", [])]
 
 
-async def _search_via_gemini(query: str, location: str, limit: int) -> list[Venue]:
-    """Use Gemini to generate real venue recommendations when Places API is unavailable.
+async def _search_via_llm(query: str, location: str, limit: int) -> list[Venue]:
+    """Use Claude to generate real venue recommendations when Places API is unavailable.
 
-    Uses raw httpx POST to the Gemini REST API for maximum speed and control.
-    Gemini 2.0 Flash Lite is used instead of 2.5 Flash because:
-    - This is a simple list-generation task (no reasoning needed)
-    - 2.0 Flash Lite responds in 2-5s vs 15-30s for 2.5 Flash
-    - Avoids the google-genai SDK's AFC overhead that causes hangs
+    Claude Haiku is used for speed — this is a simple list-generation task.
+    Falls back to Gemini if no Anthropic key is available.
     """
-    api_key = settings.gemini_api_key or settings.google_api_key
-
     prompt = f"""Find {limit} real, currently operating venues for: "{query}" in {location}.
 
 Return ONLY a valid JSON array. Each object must have these exact fields:
@@ -131,18 +126,43 @@ Return ONLY a valid JSON array. Each object must have these exact fields:
 
 Return the JSON array only, no markdown, no explanation."""
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
-    body = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3},
-    }
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(url, json=body, timeout=20.0)
-        response.raise_for_status()
-        data = response.json()
-
-    text = data["candidates"][0]["content"]["parts"][0]["text"]
+    api_key = settings.anthropic_api_key
+    if api_key:
+        # Use Claude via Anthropic API
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-haiku-4-5-20251001",
+                    "max_tokens": 4096,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+                timeout=20.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+        text = data["content"][0]["text"]
+    else:
+        # Fallback to Gemini REST API
+        gemini_key = settings.gemini_api_key or settings.google_api_key
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url,
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"temperature": 0.3},
+                },
+                timeout=20.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
 
     text = text.strip()
     # Strip markdown code fences if present
@@ -159,7 +179,7 @@ Return the JSON array only, no markdown, no explanation."""
     venues = []
     for v in venues_data:
         venues.append(Venue(
-            id=f"gemini-{uuid.uuid4().hex[:8]}",
+            id=f"llm-{uuid.uuid4().hex[:8]}",
             source=VenueSource.GOOGLE,
             source_id="",
             name=v.get("name", "Unknown"),
@@ -178,7 +198,7 @@ async def search_google_places(
     location: str | None = None,
     limit: int = 10,
 ) -> list[Venue]:
-    """Search for venues using Google Places API, with Gemini fallback.
+    """Search for venues using Google Places API, with LLM fallback.
 
     Args:
         query: Search text (e.g., "Italian restaurant with arcade").
@@ -189,23 +209,23 @@ async def search_google_places(
         List of Venue objects.
     """
     api_key = settings.google_api_key or settings.gemini_api_key
-    if not api_key:
+    if not api_key and not settings.anthropic_api_key:
         return []
 
     loc = location or settings.default_location
 
-    # Try Places API first, fall back to Gemini
+    # Try Places API first, fall back to LLM
     try:
         venues = await _search_places_api(query, loc, limit)
         logger.info(f"[GooglePlaces] Places API returned {len(venues)} venues")
         return venues
     except Exception as e:
-        logger.info(f"[GooglePlaces] Places API failed ({type(e).__name__}: {e}), trying Gemini fallback")
+        logger.info(f"[GooglePlaces] Places API failed ({type(e).__name__}: {e}), trying LLM fallback")
 
     try:
-        venues = await _search_via_gemini(query, loc, limit)
-        logger.info(f"[GooglePlaces] Gemini fallback returned {len(venues)} venues")
+        venues = await _search_via_llm(query, loc, limit)
+        logger.info(f"[GooglePlaces] LLM fallback returned {len(venues)} venues")
         return venues
     except Exception as e:
-        logger.warning(f"[GooglePlaces] Gemini fallback also failed: {type(e).__name__}: {e}")
+        logger.warning(f"[GooglePlaces] LLM fallback also failed: {type(e).__name__}: {e}")
         return []

@@ -16,7 +16,7 @@ from pydantic_ai import Agent, RunContext
 from src.config import settings
 from src.models.event import Venue
 from src.tools.eventbrite import search_eventbrite
-from src.tools.google_places import search_google_places, _search_places_api, _search_via_gemini
+from src.tools.google_places import search_google_places, _search_places_api, _search_via_llm
 from src.tools.ticketmaster import search_ticketmaster
 from src.tools.yelp import get_yelp_reviews, search_yelp
 
@@ -213,7 +213,7 @@ async def _run_parallel_search(
         ),
         _search_source_safe(
             "Gemini LLM",
-            _search_via_gemini(query, loc, max_results),
+            _search_via_llm(query, loc, max_results),
             timeout=30.0,
         ),
         _search_source_safe(

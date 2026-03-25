@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     # LLM Providers
     gemini_api_key: str = ""
     google_api_key: str = ""  # Alias — PydanticAI reads GOOGLE_API_KEY
+    anthropic_api_key: str = ""
     groq_api_key: str = ""
 
     # Venue APIs
@@ -45,4 +46,10 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+# Workaround: pydantic-settings sometimes misses newly added .env fields
+if not settings.anthropic_api_key:
+    from dotenv import dotenv_values
+    _env = dotenv_values(".env")
+    if _env.get("ANTHROPIC_API_KEY"):
+        settings.anthropic_api_key = _env["ANTHROPIC_API_KEY"]
 settings.sync_api_keys()
