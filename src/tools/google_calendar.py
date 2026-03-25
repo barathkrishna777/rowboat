@@ -219,8 +219,8 @@ async def create_calendar_event(
         "summary": summary,
         "location": location,
         "description": description,
-        "start": {"dateTime": start_time.isoformat(), "timeZone": "America/New_York"},
-        "end": {"dateTime": end_time.isoformat(), "timeZone": "America/New_York"},
+        "start": {"dateTime": start_time.isoformat(), "timeZone": settings.default_timezone},
+        "end": {"dateTime": end_time.isoformat(), "timeZone": settings.default_timezone},
         "attendees": [{"email": email} for email in attendee_emails],
         "reminders": {"useDefault": True},
     }

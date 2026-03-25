@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./data/outing_planner.db"
     chroma_persist_dir: str = "./data/chroma_db"
     default_location: str = "Pittsburgh, PA"
+    default_timezone: str = "America/New_York"
 
     # LLM Settings
     primary_model: str = "google-gla:gemini-2.5-flash"

@@ -302,7 +302,7 @@ if step == 0:
                                 "location": qp_location,
                                 "date_range_start": qp_date_start.isoformat(),
                                 "date_range_end": qp_date_end.isoformat(),
-                                "earliest_time": "17:00",
+                                "earliest_time": "09:00",
                                 "latest_time": "23:00",
                             }
                             resp = httpx.post(f"{API_BASE}/plans/orchestrate", json=payload, timeout=120.0)
@@ -504,7 +504,7 @@ elif step == 2:
     col1, col2 = st.columns(2)
     with col1:
         start_date = st.date_input("Search from", value=datetime.now().date() + timedelta(days=1))
-        earliest_time = st.time_input("Earliest start time", value=dt_time(17, 0))
+        earliest_time = st.time_input("Earliest start time", value=dt_time(9, 0))
     with col2:
         end_date = st.date_input("Search to", value=datetime.now().date() + timedelta(days=7))
         latest_time = st.time_input("Latest end time", value=dt_time(23, 0))
@@ -520,10 +520,7 @@ elif step == 2:
         current = datetime.combine(start_date, datetime.min.time())
         end_dt = datetime.combine(end_date, datetime.min.time())
         while current <= end_dt:
-            if current.weekday() >= 5:
-                slot_start_hour = max(earliest_time.hour, 12)
-            else:
-                slot_start_hour = max(earliest_time.hour, 17)
+            slot_start_hour = earliest_time.hour
 
             # [FIX 3] Handle overnight wrap
             if wraps_overnight:
@@ -1148,7 +1145,10 @@ elif step == 5:
         st.markdown('<div class="section-card"><div class="section-title">🎉 Booking Confirmed!</div>'
                     '<div class="section-subtitle">Here\'s a summary of your group outing reservation</div></div>',
                     unsafe_allow_html=True)
-        st.success("Calendar invites have been sent to all group members!")
+        if st.session_state.get("calendar_invites_sent"):
+            st.success("Calendar invites have been sent to all group members!")
+        else:
+            st.success("Booking confirmed! Connect Google Calendar to send invites automatically.")
     else:
         st.markdown('<div class="section-card"><div class="section-title">📋 Review & Book</div>'
                     '<div class="section-subtitle">Confirm your outing details and send calendar invites</div></div>',
@@ -1163,16 +1163,22 @@ elif step == 5:
 
     cats = venue.get("categories", [])
     badges = "".join(f'<span class="venue-badge">{c}</span>' for c in cats[:3])
-    price_html = f'<span class="price-badge">{venue.get("price_tier","")}</span>' if venue.get("price_tier") else ""
-    rating_stars = f"{'⭐' * int(venue.get('rating', 0))}" if venue.get("rating") else ""
+    price_html = f'<span class="venue-badge">{venue.get("price_tier","")}</span>' if venue.get("price_tier") else ""
+    rating_val = venue.get("rating")
+    rating_stars = f"{'⭐' * int(float(rating_val))}" if rating_val else ""
 
-    st.markdown(f"""<div class="venue-card selected" style="border-width:2px;">
-        <span class="venue-name" style="font-size:22px;">{venue.get('name', 'Venue')}</span> {price_html}<br>
-        <span class="venue-meta" style="font-size:15px;">📍 {venue.get('address', 'Address TBD')}</span><br>
-        <span class="venue-meta" style="font-size:15px;">🕐 {slot_str}</span><br>
-        <span class="venue-meta">{rating_stars}</span><br>
-        {badges}
-    </div>""", unsafe_allow_html=True)
+    card_lines = [
+        f'<span class="venue-name" style="font-size:22px;">{venue.get("name", "Venue")}</span> {price_html}',
+        f'<span class="venue-meta" style="font-size:15px;">📍 {venue.get("address", "Address TBD")}</span>',
+        f'<span class="venue-meta" style="font-size:15px;">🕐 {slot_str}</span>',
+    ]
+    if rating_stars:
+        card_lines.append(f'<span class="venue-meta">{rating_stars}</span>')
+    if badges:
+        card_lines.append(badges)
+    card_html = "<br>".join(card_lines)
+
+    st.markdown(f'<div class="venue-card selected" style="border-width:2px;">{card_html}</div>', unsafe_allow_html=True)
 
     # Google Maps embed for the venue
     addr = venue.get("address", "")
@@ -1240,6 +1246,7 @@ elif step == 5:
                             result = resp.json()
 
                             st.session_state["booking_confirmed"] = True
+                            st.session_state["calendar_invites_sent"] = True
                             st.balloons()
                             st.success(result.get("message", "Booked!"))
                             if result.get("calendar_link"):

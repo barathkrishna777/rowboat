@@ -70,7 +70,7 @@ class QuickPlanRequest(BaseModel):
     location: str = "Pittsburgh, PA"
     date_range_start: str = ""  # ISO date
     date_range_end: str = ""
-    earliest_time: str = "17:00"
+    earliest_time: str = "09:00"
     latest_time: str = "23:00"
 
 
