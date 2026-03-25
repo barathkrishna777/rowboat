@@ -9,7 +9,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api import calendar, groups, plans, preferences
+from src.api import calendar, friends, groups, plans, preferences
 from src.config import settings
 
 # Enable logging so we can see search/API diagnostics in Railway
@@ -32,6 +32,7 @@ app.add_middleware(
 
 app.include_router(plans.router, prefix="/api/plans", tags=["plans"])
 app.include_router(groups.router, prefix="/api/groups", tags=["groups"])
+app.include_router(friends.router, prefix="/api/friends", tags=["friends"])
 app.include_router(preferences.router, prefix="/api/preferences", tags=["preferences"])
 app.include_router(calendar.router, prefix="/api/calendar", tags=["calendar"])
 

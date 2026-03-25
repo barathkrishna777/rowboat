@@ -126,6 +126,22 @@ st.markdown("""
     .hero h1 { font-size: 32px; font-weight: 800; color: #192024; margin-bottom: 0; }
     .hero-accent { color: #FF690F; }
     .hero p { color: #6B7785; font-size: 16px; }
+
+    /* ── Friends ──────────────────────────────────────── */
+    .friend-card { display: flex; align-items: center; gap: 12px; background: white; border: 1px solid #E8ECF0; border-radius: 12px; padding: 12px 16px; margin-bottom: 8px; transition: all 0.2s ease; }
+    .friend-card:hover { border-color: #FF690F; box-shadow: 0 2px 8px rgba(255,105,15,0.08); }
+    .friend-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: white; flex-shrink: 0; }
+    .friend-info { flex: 1; }
+    .friend-name { font-size: 15px; font-weight: 600; color: #192024; }
+    .friend-email { font-size: 13px; color: #6B7785; }
+    .friend-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    .friend-badge-pending { background: #FFF3EB; color: #FF690F; }
+    .friend-badge-accepted { background: #E8F8EE; color: #1DB954; }
+    .friend-count { display: inline-flex; align-items: center; gap: 6px; background: #F5F7FA; border: 1px solid #E4E8EC; border-radius: 20px; padding: 4px 14px; font-size: 13px; color: #6B7785; font-weight: 500; }
+    .friend-count .count-num { font-weight: 700; color: #FF690F; }
+    .request-card { background: #FFFBF5; border: 1px solid #FFE0C2; border-radius: 12px; padding: 14px 16px; margin-bottom: 8px; }
+    .friends-empty { text-align: center; padding: 2rem; color: #8E99A4; }
+    .friends-empty-icon { font-size: 48px; margin-bottom: 8px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -145,6 +161,12 @@ if "member_add_counter" not in st.session_state:
     st.session_state.member_add_counter = 0
 if "orchestrator_result" not in st.session_state:
     st.session_state.orchestrator_result = None
+if "show_friends_panel" not in st.session_state:
+    st.session_state.show_friends_panel = False
+if "friends_list" not in st.session_state:
+    st.session_state.friends_list = []
+if "friend_req_counter" not in st.session_state:
+    st.session_state.friend_req_counter = 0
 
 
 def advance_step():
@@ -163,6 +185,206 @@ def go_to_step(idx):
 st.markdown('<div class="hero"><h1>🎯 <span class="hero-accent">Outing</span> Planner</h1>'
             '<p>AI-powered group outing coordination — from preferences to booking</p></div>',
             unsafe_allow_html=True)
+
+# ── Avatar color helper ───────────────────────────────────────────────
+_AVATAR_COLORS = ["#FF690F", "#1DB954", "#4A90D9", "#9B59B6", "#E74C3C", "#F39C12", "#1ABC9C", "#34495E"]
+
+
+def _avatar_color(name: str) -> str:
+    return _AVATAR_COLORS[sum(ord(c) for c in name) % len(_AVATAR_COLORS)]
+
+
+def _register_current_user():
+    """Register the current user with the friends API so they can be found by email."""
+    uid = st.session_state.get("user_id")
+    if not uid or not st.session_state.get("members"):
+        return
+    me = st.session_state.members[0]
+    try:
+        httpx.post(f"{API_BASE}/friends/register", json={
+            "user_id": uid, "name": me["name"], "email": me["email"],
+        }, timeout=5.0)
+    except Exception:
+        pass
+
+
+def _refresh_friends():
+    """Fetch the latest friends list from the API."""
+    uid = st.session_state.get("user_id")
+    if not uid:
+        return
+    try:
+        resp = httpx.get(f"{API_BASE}/friends/{uid}/friends", timeout=5.0)
+        resp.raise_for_status()
+        st.session_state.friends_list = resp.json()
+    except Exception:
+        pass
+
+
+# ── Friends Panel Toggle ──────────────────────────────────────────────
+
+if st.session_state.get("user_id"):
+    _refresh_friends()
+    n_friends = len(st.session_state.friends_list)
+
+    # Check for incoming requests
+    incoming_requests = []
+    try:
+        resp = httpx.get(f"{API_BASE}/friends/{st.session_state.user_id}/requests/incoming", timeout=5.0)
+        if resp.status_code == 200:
+            incoming_requests = resp.json()
+    except Exception:
+        pass
+
+    n_pending = len(incoming_requests)
+    badge_html = f' <span style="background:#E74C3C;color:white;border-radius:50%;padding:1px 7px;font-size:11px;font-weight:700;">{n_pending}</span>' if n_pending else ""
+
+    fcol1, fcol2 = st.columns([6, 1])
+    with fcol2:
+        btn_label = "👥 Friends" if not st.session_state.show_friends_panel else "✕ Close"
+        if st.button(btn_label, key="toggle_friends", use_container_width=True):
+            st.session_state.show_friends_panel = not st.session_state.show_friends_panel
+            st.rerun()
+    with fcol1:
+        if n_friends or n_pending:
+            st.markdown(
+                f'<span class="friend-count"><span class="count-num">{n_friends}</span> friend{"s" if n_friends != 1 else ""}'
+                f'{badge_html}</span>',
+                unsafe_allow_html=True,
+            )
+
+    # ── Friends Management Panel ──────────────────────────────────────
+    if st.session_state.show_friends_panel:
+        st.markdown("---")
+        st.markdown('<div class="section-card"><div class="section-title">👥 Friends</div>'
+                    '<div class="section-subtitle">Manage your friends to quickly add them to outings</div></div>',
+                    unsafe_allow_html=True)
+
+        tab_friends, tab_requests, tab_add = st.tabs(["My Friends", f"Requests ({n_pending})", "Add Friend"])
+
+        with tab_friends:
+            if st.session_state.friends_list:
+                for friend in st.session_state.friends_list:
+                    fname = friend.get("name", "Unknown")
+                    femail = friend.get("email", "")
+                    color = _avatar_color(fname)
+                    initial = fname[0].upper() if fname else "?"
+
+                    fc1, fc2 = st.columns([8, 1])
+                    with fc1:
+                        st.markdown(
+                            f'<div class="friend-card">'
+                            f'<div class="friend-avatar" style="background:{color}">{initial}</div>'
+                            f'<div class="friend-info"><div class="friend-name">{fname}</div>'
+                            f'<div class="friend-email">{femail}</div></div>'
+                            f'<span class="friend-badge friend-badge-accepted">Friends</span>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                    with fc2:
+                        if st.button("✕", key=f"rm_friend_{friend.get('id', fname)}", help="Remove friend"):
+                            try:
+                                httpx.delete(
+                                    f"{API_BASE}/friends/{st.session_state.user_id}/friends/{friend['id']}",
+                                    timeout=5.0,
+                                )
+                                _refresh_friends()
+                                st.rerun()
+                            except Exception:
+                                st.error("Failed to remove friend")
+            else:
+                st.markdown(
+                    '<div class="friends-empty"><div class="friends-empty-icon">👋</div>'
+                    'No friends yet. Add some to get started!</div>',
+                    unsafe_allow_html=True,
+                )
+
+        with tab_requests:
+            if incoming_requests:
+                for req in incoming_requests:
+                    requester = req.get("requester", {})
+                    rname = requester.get("name", "Unknown") if requester else "Unknown"
+                    remail = requester.get("email", "") if requester else ""
+                    color = _avatar_color(rname)
+                    initial = rname[0].upper() if rname else "?"
+                    fid = req.get("id")
+
+                    st.markdown(
+                        f'<div class="request-card">'
+                        f'<div style="display:flex;align-items:center;gap:10px;">'
+                        f'<div class="friend-avatar" style="background:{color}">{initial}</div>'
+                        f'<div class="friend-info"><div class="friend-name">{rname}</div>'
+                        f'<div class="friend-email">{remail}</div></div>'
+                        f'<span class="friend-badge friend-badge-pending">Pending</span>'
+                        f'</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                    rc1, rc2, _ = st.columns([1, 1, 4])
+                    with rc1:
+                        if st.button("✅ Accept", key=f"accept_{fid}", use_container_width=True):
+                            try:
+                                httpx.post(
+                                    f"{API_BASE}/friends/{st.session_state.user_id}/respond/{fid}",
+                                    json={"accept": True}, timeout=5.0,
+                                )
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error: {e}")
+                    with rc2:
+                        if st.button("✕ Decline", key=f"decline_{fid}", use_container_width=True):
+                            try:
+                                httpx.post(
+                                    f"{API_BASE}/friends/{st.session_state.user_id}/respond/{fid}",
+                                    json={"accept": False}, timeout=5.0,
+                                )
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error: {e}")
+            else:
+                st.info("No pending friend requests.")
+
+            # Show outgoing
+            outgoing_requests = []
+            try:
+                resp = httpx.get(f"{API_BASE}/friends/{st.session_state.user_id}/requests/outgoing", timeout=5.0)
+                if resp.status_code == 200:
+                    outgoing_requests = resp.json()
+            except Exception:
+                pass
+            if outgoing_requests:
+                st.caption("**Sent requests**")
+                for req in outgoing_requests:
+                    addressee = req.get("addressee", {})
+                    aname = addressee.get("name", "Unknown") if addressee else "Unknown"
+                    aemail = addressee.get("email", "") if addressee else ""
+                    st.markdown(
+                        f'<span class="member-chip">⏳ {aname} ({aemail})</span>',
+                        unsafe_allow_html=True,
+                    )
+
+        with tab_add:
+            st.markdown("Send a friend request by email. The other person must have created a group first so they're registered in the system.")
+            form_key = f"add_friend_{st.session_state.friend_req_counter}"
+            with st.form(form_key):
+                friend_email = st.text_input("Friend's Email", placeholder="friend@example.com")
+                send_btn = st.form_submit_button("Send Friend Request", type="primary")
+                if send_btn and friend_email:
+                    try:
+                        resp = httpx.post(
+                            f"{API_BASE}/friends/{st.session_state.user_id}/request",
+                            json={"to_email": friend_email}, timeout=5.0,
+                        )
+                        resp.raise_for_status()
+                        st.success(f"Friend request sent to {friend_email}!")
+                        st.session_state.friend_req_counter += 1
+                        st.rerun()
+                    except httpx.HTTPStatusError as e:
+                        detail = e.response.json().get("detail", str(e))
+                        st.error(detail)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+        st.markdown("---")
 
 
 def render_stepper():
@@ -220,6 +442,7 @@ if step == 0:
                     st.session_state.group_id = data["id"]
                     st.session_state.user_id = data["member_ids"][0]
                     st.session_state.members = [{"name": your_name, "email": your_email}]
+                    _register_current_user()
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {e}")
@@ -247,6 +470,46 @@ if step == 0:
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {e}")
+
+        # ── Quick Add from Friends ────────────────────────────────────
+        if st.session_state.friends_list:
+            current_emails = {m.get("email", "").lower() for m in st.session_state.members}
+            available_friends = [
+                f for f in st.session_state.friends_list
+                if f.get("email", "").lower() not in current_emails
+            ]
+            if available_friends:
+                with st.expander("⚡ Quick Add from Friends", expanded=True):
+                    st.caption("Click to instantly add a friend to this group")
+                    for friend in available_friends:
+                        fname = friend.get("name", "Unknown")
+                        femail = friend.get("email", "")
+                        color = _avatar_color(fname)
+                        initial = fname[0].upper() if fname else "?"
+
+                        af1, af2 = st.columns([6, 1])
+                        with af1:
+                            st.markdown(
+                                f'<div class="friend-card">'
+                                f'<div class="friend-avatar" style="background:{color}">{initial}</div>'
+                                f'<div class="friend-info"><div class="friend-name">{fname}</div>'
+                                f'<div class="friend-email">{femail}</div></div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        with af2:
+                            if st.button("+ Add", key=f"qadd_{friend.get('id', fname)}", use_container_width=True):
+                                try:
+                                    resp = httpx.post(
+                                        f"{API_BASE}/groups/{st.session_state.group_id}/members",
+                                        json={"name": fname, "email": femail},
+                                    )
+                                    resp.raise_for_status()
+                                    st.session_state.members.append({"name": fname, "email": femail})
+                                    st.session_state.member_add_counter += 1
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
 
         # Mini calendar status
         calendars_connected = st.session_state.get("calendars_connected", {})

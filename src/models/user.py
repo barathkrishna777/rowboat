@@ -55,6 +55,26 @@ class User(BaseModel):
     preferences: UserPreferences | None = None
 
 
+class FriendshipStatus(str, Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    DECLINED = "declined"
+
+
+class Friendship(BaseModel):
+    id: int | None = None
+    requester_id: str
+    addressee_id: str
+    status: FriendshipStatus = FriendshipStatus.PENDING
+    requester: User | None = None
+    addressee: User | None = None
+
+
+class FriendRequest(BaseModel):
+    from_user_id: str
+    to_email: str
+
+
 class Group(BaseModel):
     id: str
     name: str

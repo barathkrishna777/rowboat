@@ -56,6 +56,17 @@ class EventTable(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class FriendshipTable(Base):
+    __tablename__ = "friendships"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    requester_id = Column(String, ForeignKey("users.id"), nullable=False)
+    addressee_id = Column(String, ForeignKey("users.id"), nullable=False)
+    status = Column(String, default="pending")  # pending | accepted | declined
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 class FeedbackTable(Base):
     __tablename__ = "feedback"
 

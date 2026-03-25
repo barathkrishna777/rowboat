@@ -8,10 +8,10 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.tables import EventTable, FeedbackTable, GroupMemberTable, GroupTable, UserTable
+from src.db.tables import EventTable, FeedbackTable, FriendshipTable, GroupMemberTable, GroupTable, UserTable
 from src.models.event import Itinerary
 from src.models.feedback import PostEventFeedback
-from src.models.user import Group, User, UserPreferences
+from src.models.user import Friendship, FriendshipStatus, Group, User, UserPreferences
 
 
 # ── Users ──────────────────────────────────────────────────────────────
@@ -158,3 +158,127 @@ async def get_event_feedback(session: AsyncSession, event_id: str) -> list[PostE
             )
         )
     return feedbacks
+
+
+# ── Friendships ────────────────────────────────────────────────────────
+
+
+async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
+    result = await session.execute(select(UserTable).where(UserTable.email == email))
+    row = result.scalar_one_or_none()
+    if not row:
+        return None
+    prefs = UserPreferences(**json.loads(row.preferences)) if row.preferences else None
+    token = json.loads(row.google_calendar_token) if row.google_calendar_token else None
+    return User(id=row.id, name=row.name, email=row.email, preferences=prefs, google_calendar_token=token)
+
+
+async def send_friend_request(session: AsyncSession, requester_id: str, addressee_id: str) -> Friendship | None:
+    if requester_id == addressee_id:
+        return None
+
+    # Check for existing friendship in either direction
+    result = await session.execute(
+        select(FriendshipTable).where(
+            ((FriendshipTable.requester_id == requester_id) & (FriendshipTable.addressee_id == addressee_id))
+            | ((FriendshipTable.requester_id == addressee_id) & (FriendshipTable.addressee_id == requester_id))
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        return Friendship(
+            id=existing.id,
+            requester_id=existing.requester_id,
+            addressee_id=existing.addressee_id,
+            status=FriendshipStatus(existing.status),
+        )
+
+    row = FriendshipTable(requester_id=requester_id, addressee_id=addressee_id, status="pending")
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return Friendship(id=row.id, requester_id=requester_id, addressee_id=addressee_id, status=FriendshipStatus.PENDING)
+
+
+async def respond_to_friend_request(session: AsyncSession, friendship_id: int, accept: bool) -> bool:
+    row = await session.get(FriendshipTable, friendship_id)
+    if not row or row.status != "pending":
+        return False
+    row.status = "accepted" if accept else "declined"
+    await session.commit()
+    return True
+
+
+async def get_friends(session: AsyncSession, user_id: str) -> list[User]:
+    """Return all accepted friends for a user."""
+    result = await session.execute(
+        select(FriendshipTable).where(
+            ((FriendshipTable.requester_id == user_id) | (FriendshipTable.addressee_id == user_id))
+            & (FriendshipTable.status == "accepted")
+        )
+    )
+    rows = result.scalars().all()
+    friends = []
+    for row in rows:
+        friend_id = row.addressee_id if row.requester_id == user_id else row.requester_id
+        user = await get_user(session, friend_id)
+        if user:
+            friends.append(user)
+    return friends
+
+
+async def get_pending_requests(session: AsyncSession, user_id: str) -> list[Friendship]:
+    """Return pending friend requests where user is the addressee."""
+    result = await session.execute(
+        select(FriendshipTable).where(
+            (FriendshipTable.addressee_id == user_id) & (FriendshipTable.status == "pending")
+        )
+    )
+    rows = result.scalars().all()
+    friendships = []
+    for row in rows:
+        requester = await get_user(session, row.requester_id)
+        friendships.append(Friendship(
+            id=row.id,
+            requester_id=row.requester_id,
+            addressee_id=row.addressee_id,
+            status=FriendshipStatus.PENDING,
+            requester=requester,
+        ))
+    return friendships
+
+
+async def get_sent_requests(session: AsyncSession, user_id: str) -> list[Friendship]:
+    """Return pending friend requests sent by user."""
+    result = await session.execute(
+        select(FriendshipTable).where(
+            (FriendshipTable.requester_id == user_id) & (FriendshipTable.status == "pending")
+        )
+    )
+    rows = result.scalars().all()
+    friendships = []
+    for row in rows:
+        addressee = await get_user(session, row.addressee_id)
+        friendships.append(Friendship(
+            id=row.id,
+            requester_id=row.requester_id,
+            addressee_id=row.addressee_id,
+            status=FriendshipStatus.PENDING,
+            addressee=addressee,
+        ))
+    return friendships
+
+
+async def remove_friend(session: AsyncSession, user_id: str, friend_id: str) -> bool:
+    result = await session.execute(
+        select(FriendshipTable).where(
+            ((FriendshipTable.requester_id == user_id) & (FriendshipTable.addressee_id == friend_id))
+            | ((FriendshipTable.requester_id == friend_id) & (FriendshipTable.addressee_id == user_id))
+        )
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        return False
+    await session.delete(row)
+    await session.commit()
+    return True
