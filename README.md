@@ -9,6 +9,7 @@
 - **Preference Agent** -- Adaptive AI questionnaire that builds user profiles (cuisines, activities, dietary restrictions, budget, dealbreakers, accessibility)
 - **Calendar Agent** -- Finds time slots where all group members are available, with overnight scheduling support
 - **Recommendation Agent** -- Combines constraint solving with RAG context for explained, ranked recommendations
+- **Orchestrator Agent** -- Coordinates all sub-agents autonomously: parses a natural-language request, searches venues, finds available slots, ranks against constraints, and produces a final itinerary ("one-click planning")
 
 ### Constraint Solver
 - **Hard constraints** (instant reject): Budget limit, dietary restrictions, dealbreakers
@@ -32,38 +33,38 @@
 
 | Layer | Technology |
 |-------|-----------|
-| **AI Agents** | [PydanticAI](https://docs.pydantic.dev/latest/concepts/agents/) v1.70 with `google-gla:gemini-2.5-flash` |
+| **AI Agents** | [PydanticAI](https://ai.pydantic.dev/) with `google-gla:gemini-2.5-flash` |
 | **Backend** | FastAPI with async routers (plans, groups, preferences, calendar) |
 | **Frontend** | Streamlit single-page app with stepper navigation |
 | **Persistence** | SQLAlchemy async + aiosqlite (SQLite) |
 | **Vector DB** | ChromaDB for RAG knowledge base |
 | **Venue Search** | Google Places API with Gemini direct-call fallback |
 | **Maps** | Google Maps Embed API |
-| **Testing** | pytest + pytest-asyncio + respx (64 tests) |
+| **Testing** | pytest + pytest-asyncio + respx (69 tests) |
 
 ## Architecture
 
 ```
-+-------------------------------------------------+
-|                  Streamlit UI                    |
-|         (Single-page stepper flow)              |
-+------------------------+------------------------+
-                         | HTTP
-+------------------------v------------------------+
-|                  FastAPI Backend                 |
-|   /api/plans  /api/groups  /api/preferences     |
-|   /api/calendar  /api/plans/recommend           |
-+------+--------+--------+--------+--------------+
-       |        |        |        |
-+------v--+ +---v----+ +-v------+ +---v-----------+
-| Search  | |Prefernc| |Calendar| |Recommendation |
-|  Agent  | | Agent  | | Agent  | |    Agent      |
-+--+------+ +--------+ +--------+ +--+----+------+
-   |                                  |    |
-+--v----------------------------------v----v------+
-|              External APIs / Tools              |
-|  Google Places . Yelp . Eventbrite . Gemini     |
-+---------+-----------+-----------+---------------+
++-----------------------------------------------------------+
+|                      Streamlit UI                         |
+|             (Single-page stepper flow)                    |
++----------------------------+------------------------------+
+                             | HTTP
++----------------------------v------------------------------+
+|                     FastAPI Backend                        |
+|  /api/plans  /api/groups  /api/preferences                |
+|  /api/calendar  /api/plans/recommend  /api/plans/orchestrate |
++----+--------+----------+--------+--------+---------------+
+     |        |          |        |        |
++----v---+ +--v-------+ +v------+ +--v-----------+ +--v-----------+
+| Search | |Preference| |Calendar| |Recommendation| |Orchestrator |
+| Agent  | |  Agent   | | Agent  | |    Agent     | |   Agent     |
++--+-----+ +----------+ +--------+ +--+----+-----+ +--+----+-----+
+   |                                   |    |          |    |
++--v-----------------------------------v----v----------v----v-----+
+|                    External APIs / Tools                        |
+|       Google Places . Yelp . Eventbrite . Gemini               |
++---------+-----------+-----------+------------------------------+
           |           |           |
    +------v---+ +----v-----+ +---v---------+
    | ChromaDB | | SQLite   | | Google Maps |
@@ -75,20 +76,23 @@
 
 ```
 src/
-├── agents/              # PydanticAI agents (search, preference, calendar, recommendation)
-├── api/                 # FastAPI routers
+├── agents/              # PydanticAI agents (search, preference, calendar, recommendation, orchestrator)
+├── api/                 # FastAPI routers (plans, groups, preferences, calendar)
 ├── constraints/         # Constraint solver (hard + soft constraints)
 ├── db/                  # SQLAlchemy tables, CRUD, async engine
 ├── models/              # Pydantic data models (Event, Venue, Constraints, etc.)
 ├── rag/                 # RAG pipeline (ChromaDB venue store + feedback memory)
 ├── tools/               # External API integrations (Google Places, Yelp, etc.)
-├── ui/                  # Streamlit single-page app
+├── ui/
+│   ├── app.py           # Streamlit single-page app with stepper navigation
+│   └── pages/           # Step pages (create group, preferences, calendar, plan, review, feedback)
 ├── config.py            # Settings via pydantic-settings
 └── main.py              # FastAPI app entrypoint
 tests/
 ├── test_constraints.py  # Constraint solver tests (27 tests)
 ├── test_db.py           # Database CRUD tests (9 tests)
-├── test_models.py       # Model validation tests (14 tests)
+├── test_models.py       # Model validation tests (15 tests)
+├── test_orchestrator.py # Orchestrator agent tests (5 tests)
 ├── test_tools/
 │   ├── test_calendar.py # Calendar availability tests (8 tests)
 │   └── test_yelp.py     # Yelp API tests (5 tests)
@@ -129,6 +133,7 @@ Open **http://localhost:8501** in your browser.
 |--------|----------|-------------|
 | POST | `/api/plans/search` | Search venues using AI search agent |
 | POST | `/api/plans/recommend` | Score and rank venues against group constraints |
+| POST | `/api/plans/orchestrate` | Plan an outing end-to-end using the orchestrator agent |
 | POST | `/api/groups/` | Create a new group |
 | GET | `/api/groups/{id}` | Get group details |
 | POST | `/api/groups/{id}/members` | Add member to group |
@@ -139,7 +144,7 @@ Open **http://localhost:8501** in your browser.
 ## Development
 
 ```bash
-# Run tests (64 tests)
+# Run tests (69 tests)
 pytest
 
 # Lint
@@ -156,7 +161,7 @@ ruff format src/ tests/
 - [x] **Phase 2.5** -- UI/UX polish: Kayak-inspired redesign, interactive ranking, maps
 - [x] **Phase 3** -- Constraint solver, RAG pipeline (ChromaDB), recommendation agent
 - [ ] **Phase 4** -- Real Google Calendar OAuth + live booking integrations
-- [ ] **Phase 5** -- Orchestrator agent to coordinate all sub-agents autonomously
+- [x] **Phase 5** -- Orchestrator agent to coordinate all sub-agents autonomously
 - [ ] **Phase 6** -- Production hardening, deployment, analytics dashboard
 
 ## Team
