@@ -212,7 +212,7 @@ async def _run_parallel_search(
             timeout=10.0,
         ),
         _search_source_safe(
-            "Gemini LLM",
+            "AI Search",
             _search_via_llm(query, loc, max_results),
             timeout=30.0,
         ),
