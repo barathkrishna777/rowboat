@@ -43,6 +43,10 @@ def get_oauth_flow() -> Flow:
     return flow
 
 
+# Temporary store for PKCE code_verifiers keyed by OAuth state.
+_pending_calendar_oauth: dict[str, str] = {}
+
+
 def get_auth_url(state: str = "") -> str:
     """Get the Google OAuth2 authorization URL.
 
@@ -50,18 +54,23 @@ def get_auth_url(state: str = "") -> str:
         state: Opaque string passed through the OAuth flow (e.g. user_id).
     """
     flow = get_oauth_flow()
-    auth_url, _ = flow.authorization_url(
+    auth_url, oauth_state = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
         state=state or "default",
     )
+    if hasattr(flow, "code_verifier") and flow.code_verifier:
+        _pending_calendar_oauth[oauth_state] = flow.code_verifier
     return auth_url
 
 
-def exchange_code_for_token(authorization_code: str) -> dict:
+def exchange_code_for_token(authorization_code: str, state: str = "") -> dict:
     """Exchange an authorization code for OAuth tokens."""
     flow = get_oauth_flow()
+    code_verifier = _pending_calendar_oauth.pop(state, None)
+    if code_verifier:
+        flow.code_verifier = code_verifier
     flow.fetch_token(code=authorization_code)
     credentials = flow.credentials
     return {

@@ -172,46 +172,54 @@ async def login(
 
 # ── Google OAuth sign-in ──────────────────────────────────────────────
 
+# Temporary store for PKCE code_verifiers keyed by OAuth state.
+# In production, replace with Redis or a DB table with TTL.
+_pending_oauth: dict[str, str] = {}
+
+
+def _build_google_flow():
+    from google_auth_oauthlib.flow import Flow
+    redirect_uri = _get_auth_redirect_uri()
+    client_config = {
+        "web": {
+            "client_id": settings.google_client_id,
+            "client_secret": settings.google_client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": [redirect_uri],
+        }
+    }
+    return Flow.from_client_config(client_config, scopes=SCOPES, redirect_uri=redirect_uri)
+
 
 @router.get("/google/url")
 async def google_auth_url():
     """Get the Google OAuth sign-in URL (covers sign-in + calendar access)."""
-    from google_auth_oauthlib.flow import Flow
-    redirect_uri = _get_auth_redirect_uri()
-    client_config = {
-        "web": {
-            "client_id": settings.google_client_id,
-            "client_secret": settings.google_client_secret,
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [redirect_uri],
-        }
-    }
-    flow = Flow.from_client_config(client_config, scopes=SCOPES, redirect_uri=redirect_uri)
-    auth_url, _ = flow.authorization_url(
+    flow = _build_google_flow()
+    auth_url, state = flow.authorization_url(
         access_type="offline", include_granted_scopes="true", prompt="consent",
     )
+    # Store the PKCE code_verifier so the callback can use it
+    if hasattr(flow, "code_verifier") and flow.code_verifier:
+        _pending_oauth[state] = flow.code_verifier
     return {"auth_url": auth_url}
 
 
 @router.get("/google/callback")
-async def google_auth_callback(code: str, session: AsyncSession = Depends(get_session)):
+async def google_auth_callback(
+    code: str,
+    state: str = "",
+    session: AsyncSession = Depends(get_session),
+):
     """Handle Google OAuth callback — create/login user and store calendar token."""
-    from google_auth_oauthlib.flow import Flow
-    from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build as build_service
 
-    redirect_uri = _get_auth_redirect_uri()
-    client_config = {
-        "web": {
-            "client_id": settings.google_client_id,
-            "client_secret": settings.google_client_secret,
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [redirect_uri],
-        }
-    }
-    flow = Flow.from_client_config(client_config, scopes=SCOPES, redirect_uri=redirect_uri)
+    flow = _build_google_flow()
+
+    # Restore the PKCE code_verifier from the original auth request
+    code_verifier = _pending_oauth.pop(state, None)
+    if code_verifier:
+        flow.code_verifier = code_verifier
 
     try:
         flow.fetch_token(code=code)

@@ -44,7 +44,7 @@ async def get_calendar_auth_url(user_id: str = ""):
 async def calendar_oauth_callback(code: str, state: str = ""):
     """Handle the Google OAuth callback — exchange code for token and store it."""
     try:
-        token_data = exchange_code_for_token(code)
+        token_data = exchange_code_for_token(code, state=state)
     except Exception as e:
         logger.error(f"[Calendar] OAuth token exchange failed: {e}")
         raise HTTPException(status_code=400, detail=str(e))
