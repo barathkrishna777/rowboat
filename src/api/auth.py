@@ -1,15 +1,19 @@
-"""Authentication API — register, login, and JWT-based session management."""
+"""Authentication API — email/password, Google OAuth sign-in, and username management."""
 
 from __future__ import annotations
 
+import json
+import logging
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,10 +21,18 @@ from src.config import settings
 from src.db.database import get_session
 from src.db.tables import UserTable
 from src.models.user import User, UserPreferences
+from src.tools.google_calendar import (
+    SCOPES,
+    exchange_code_for_token,
+    get_oauth_flow,
+)
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+
+USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -44,13 +56,22 @@ def _create_token(user_id: str) -> str:
 
 
 def _row_to_user(row: UserTable) -> User:
-    import json
     prefs = UserPreferences(**json.loads(row.preferences)) if row.preferences else None
     token = json.loads(row.google_calendar_token) if row.google_calendar_token else None
-    return User(id=row.id, name=row.name, email=row.email, preferences=prefs, google_calendar_token=token)
+    return User(
+        id=row.id, name=row.name, email=row.email,
+        username=row.username, auth_provider=row.auth_provider,
+        preferences=prefs, google_calendar_token=token,
+    )
 
 
-# ── Dependency: current user (optional — returns None if no token) ─────
+def _get_auth_redirect_uri() -> str:
+    import os
+    base = os.environ.get("API_BASE_URL", "http://localhost:8000").rstrip("/")
+    return f"{base}/api/auth/google/callback"
+
+
+# ── Dependency: current user ───────────────────────────────────────────
 
 
 async def get_current_user_optional(
@@ -83,6 +104,7 @@ class RegisterRequest(BaseModel):
     name: str
     email: str
     password: str
+    username: str | None = None
 
 
 class LoginResponse(BaseModel):
@@ -91,36 +113,44 @@ class LoginResponse(BaseModel):
     user: User
 
 
-class UserPublic(BaseModel):
-    id: str
-    name: str
-    email: str
+class SetUsernameRequest(BaseModel):
+    username: str
 
 
-# ── Endpoints ──────────────────────────────────────────────────────────
+# ── Email/password endpoints ──────────────────────────────────────────
 
 
 @router.post("/register", response_model=LoginResponse)
 async def register(req: RegisterRequest, session: AsyncSession = Depends(get_session)):
-    """Create a new account and return a JWT."""
+    """Create a new account with email/password and return a JWT."""
     existing = (await session.execute(
         select(UserTable).where(UserTable.email == req.email)
     )).scalar_one_or_none()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    username = None
+    if req.username:
+        if not USERNAME_RE.match(req.username):
+            raise HTTPException(status_code=400, detail="Username must be 3-30 characters (letters, numbers, underscores)")
+        taken = (await session.execute(
+            select(UserTable).where(UserTable.username == req.username)
+        )).scalar_one_or_none()
+        if taken:
+            raise HTTPException(status_code=400, detail="Username already taken")
+        username = req.username
+
     user_id = str(uuid.uuid4())
     row = UserTable(
-        id=user_id,
-        name=req.name,
-        email=req.email,
-        password_hash=_hash_password(req.password),
+        id=user_id, name=req.name, email=req.email,
+        username=username, password_hash=_hash_password(req.password),
+        auth_provider="email",
     )
     session.add(row)
     await session.commit()
 
     token = _create_token(user_id)
-    return LoginResponse(access_token=token, user=User(id=user_id, name=req.name, email=req.email))
+    return LoginResponse(access_token=token, user=_row_to_user(row))
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -138,6 +168,155 @@ async def login(
 
     token = _create_token(row.id)
     return LoginResponse(access_token=token, user=_row_to_user(row))
+
+
+# ── Google OAuth sign-in ──────────────────────────────────────────────
+
+
+@router.get("/google/url")
+async def google_auth_url():
+    """Get the Google OAuth sign-in URL (covers sign-in + calendar access)."""
+    from google_auth_oauthlib.flow import Flow
+    redirect_uri = _get_auth_redirect_uri()
+    client_config = {
+        "web": {
+            "client_id": settings.google_client_id,
+            "client_secret": settings.google_client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": [redirect_uri],
+        }
+    }
+    flow = Flow.from_client_config(client_config, scopes=SCOPES, redirect_uri=redirect_uri)
+    auth_url, _ = flow.authorization_url(
+        access_type="offline", include_granted_scopes="true", prompt="consent",
+    )
+    return {"auth_url": auth_url}
+
+
+@router.get("/google/callback")
+async def google_auth_callback(code: str, session: AsyncSession = Depends(get_session)):
+    """Handle Google OAuth callback — create/login user and store calendar token."""
+    from google_auth_oauthlib.flow import Flow
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build as build_service
+
+    redirect_uri = _get_auth_redirect_uri()
+    client_config = {
+        "web": {
+            "client_id": settings.google_client_id,
+            "client_secret": settings.google_client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": [redirect_uri],
+        }
+    }
+    flow = Flow.from_client_config(client_config, scopes=SCOPES, redirect_uri=redirect_uri)
+
+    try:
+        flow.fetch_token(code=code)
+    except Exception as e:
+        logger.error(f"[Auth] Google token exchange failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Google auth failed: {e}")
+
+    credentials = flow.credentials
+    token_data = {
+        "token": credentials.token,
+        "refresh_token": credentials.refresh_token,
+        "token_uri": credentials.token_uri,
+        "client_id": credentials.client_id,
+        "client_secret": credentials.client_secret,
+        "scopes": list(credentials.scopes) if credentials.scopes else list(SCOPES),
+    }
+
+    # Fetch Google profile info
+    try:
+        oauth2_service = build_service("oauth2", "v2", credentials=credentials)
+        google_user = oauth2_service.userinfo().get().execute()
+    except Exception as e:
+        logger.error(f"[Auth] Failed to fetch Google profile: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch Google profile")
+
+    google_id = google_user.get("id", "")
+    email = google_user.get("email", "")
+    name = google_user.get("name", email.split("@")[0])
+
+    # Find existing user by google_id or email
+    row = None
+    if google_id:
+        result = await session.execute(select(UserTable).where(UserTable.google_id == google_id))
+        row = result.scalar_one_or_none()
+    if not row and email:
+        result = await session.execute(select(UserTable).where(UserTable.email == email))
+        row = result.scalar_one_or_none()
+
+    if row:
+        # Existing user — update their Google info and calendar token
+        row.google_id = google_id
+        row.google_calendar_token = json.dumps(token_data)
+        if not row.auth_provider:
+            row.auth_provider = "google"
+        if row.name == "Unknown" or not row.name:
+            row.name = name
+    else:
+        # New user
+        row = UserTable(
+            id=str(uuid.uuid4()), name=name, email=email,
+            google_id=google_id, auth_provider="google",
+            google_calendar_token=json.dumps(token_data),
+        )
+        session.add(row)
+
+    await session.commit()
+    await session.refresh(row)
+
+    # Create JWT and redirect to the Streamlit UI with token in query params
+    jwt_token = _create_token(row.id)
+
+    import os
+    ui_base = os.environ.get("UI_BASE_URL", "http://localhost:8501").rstrip("/")
+    return RedirectResponse(f"{ui_base}?auth_token={jwt_token}&user_id={row.id}")
+
+
+# ── Username management ───────────────────────────────────────────────
+
+
+@router.post("/username", response_model=User)
+async def set_username(
+    req: SetUsernameRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Set or update the current user's username."""
+    if not USERNAME_RE.match(req.username):
+        raise HTTPException(
+            status_code=400,
+            detail="Username must be 3-30 characters (letters, numbers, underscores only)",
+        )
+    taken = (await session.execute(
+        select(UserTable).where(UserTable.username == req.username, UserTable.id != current_user.id)
+    )).scalar_one_or_none()
+    if taken:
+        raise HTTPException(status_code=400, detail="Username already taken")
+
+    row = await session.get(UserTable, current_user.id)
+    row.username = req.username
+    await session.commit()
+    return _row_to_user(row)
+
+
+@router.get("/check-username/{username}")
+async def check_username(username: str, session: AsyncSession = Depends(get_session)):
+    """Check if a username is available."""
+    if not USERNAME_RE.match(username):
+        return {"available": False, "reason": "Invalid format"}
+    existing = (await session.execute(
+        select(UserTable).where(UserTable.username == username)
+    )).scalar_one_or_none()
+    return {"available": existing is None}
+
+
+# ── Current user ──────────────────────────────────────────────────────
 
 
 @router.get("/me", response_model=User)

@@ -51,6 +51,8 @@ class User(BaseModel):
     id: str
     name: str
     email: str
+    username: str | None = None
+    auth_provider: str | None = None
     google_calendar_token: dict | None = None
     preferences: UserPreferences | None = None
 

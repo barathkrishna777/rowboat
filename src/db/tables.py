@@ -19,7 +19,10 @@ class UserTable(Base):
     id = Column(String, primary_key=True)
     name = Column(String, nullable=False)
     email = Column(String, nullable=False, unique=True, index=True)
+    username = Column(String, nullable=True, unique=True, index=True)
     password_hash = Column(String, nullable=True)
+    auth_provider = Column(String, nullable=True)  # "email" | "google"
+    google_id = Column(String, nullable=True, unique=True, index=True)
     google_calendar_token = Column(Text, nullable=True)  # JSON string
     preferences = Column(Text, nullable=True)  # JSON string
     created_at = Column(DateTime, default=datetime.now)

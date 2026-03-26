@@ -31,7 +31,11 @@ async def get_user(session: AsyncSession, user_id: str) -> User | None:
         return None
     prefs = UserPreferences(**json.loads(row.preferences)) if row.preferences else None
     token = json.loads(row.google_calendar_token) if row.google_calendar_token else None
-    return User(id=row.id, name=row.name, email=row.email, preferences=prefs, google_calendar_token=token)
+    return User(
+        id=row.id, name=row.name, email=row.email,
+        username=row.username, auth_provider=row.auth_provider,
+        preferences=prefs, google_calendar_token=token,
+    )
 
 
 async def update_user_preferences(session: AsyncSession, user_id: str, prefs: UserPreferences) -> bool:
@@ -170,7 +174,11 @@ async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
         return None
     prefs = UserPreferences(**json.loads(row.preferences)) if row.preferences else None
     token = json.loads(row.google_calendar_token) if row.google_calendar_token else None
-    return User(id=row.id, name=row.name, email=row.email, preferences=prefs, google_calendar_token=token)
+    return User(
+        id=row.id, name=row.name, email=row.email,
+        username=row.username, auth_provider=row.auth_provider,
+        preferences=prefs, google_calendar_token=token,
+    )
 
 
 async def send_friend_request(session: AsyncSession, requester_id: str, addressee_id: str) -> Friendship | None:

@@ -166,6 +166,30 @@ if "friends_list" not in st.session_state:
     st.session_state.friends_list = []
 if "friend_req_counter" not in st.session_state:
     st.session_state.friend_req_counter = 0
+if "auth_token" not in st.session_state:
+    st.session_state.auth_token = None
+    st.session_state.auth_user = None
+
+# ── Pick up auth token from Google OAuth redirect ─────────────────────
+_qp = st.query_params
+if "auth_token" in _qp and not st.session_state.auth_token:
+    _token = _qp["auth_token"]
+    try:
+        resp = httpx.get(
+            f"{API_BASE}/auth/me",
+            headers={"Authorization": f"Bearer {_token}"},
+            timeout=5.0,
+        )
+        if resp.status_code == 200:
+            user_data = resp.json()
+            st.session_state.auth_token = _token
+            st.session_state.auth_user = user_data
+            st.session_state.user_id = user_data["id"]
+            st.session_state.creator_user_id = user_data["id"]
+    except Exception:
+        pass
+    st.query_params.clear()
+    st.rerun()
 
 
 def advance_step():
@@ -179,11 +203,177 @@ def go_to_step(idx):
         st.session_state.current_step = idx
 
 
+# ══════════════════════════════════════════════════════════════════════
+# AUTH GATE — shown when user is not signed in
+# ══════════════════════════════════════════════════════════════════════
+
+if not st.session_state.auth_token:
+    st.markdown(
+        '<div class="hero"><h1>🎯 <span class="hero-accent">Rowboat</span></h1>'
+        '<p>AI-powered group outing coordination — from preferences to a plan in under a minute</p></div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="section-card" style="max-width:480px;margin:0 auto;">'
+                '<div class="section-title" style="text-align:center;">Welcome</div>'
+                '<div class="section-subtitle" style="text-align:center;">Sign in to plan outings with your friends</div>'
+                '</div>', unsafe_allow_html=True)
+
+    auth_tab_google, auth_tab_email_login, auth_tab_email_signup = st.tabs([
+        "Sign in with Google", "Email Login", "Create Account",
+    ])
+
+    with auth_tab_google:
+        st.markdown("Sign in with your Google account to get started. "
+                    "This also connects your **Google Calendar** automatically.")
+        try:
+            resp = httpx.get(f"{API_BASE}/auth/google/url", timeout=5.0)
+            if resp.status_code == 200:
+                google_url = resp.json().get("auth_url", "")
+                if google_url:
+                    st.link_button("🔗 Sign in with Google", google_url, use_container_width=True)
+                else:
+                    st.warning("Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.")
+            else:
+                st.warning("Could not get Google sign-in URL.")
+        except Exception as e:
+            st.error(f"Cannot reach backend: {e}")
+
+    with auth_tab_email_login:
+        with st.form("email_login"):
+            login_email = st.text_input("Email")
+            login_password = st.text_input("Password", type="password")
+            if st.form_submit_button("Sign In", type="primary"):
+                if login_email and login_password:
+                    try:
+                        resp = httpx.post(
+                            f"{API_BASE}/auth/login",
+                            data={"username": login_email, "password": login_password},
+                            timeout=10.0,
+                        )
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            st.session_state.auth_token = data["access_token"]
+                            st.session_state.auth_user = data["user"]
+                            st.session_state.user_id = data["user"]["id"]
+                            st.session_state.creator_user_id = data["user"]["id"]
+                            st.rerun()
+                        else:
+                            detail = resp.json().get("detail", "Login failed")
+                            st.error(detail)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+        st.caption("Don't have an account? Use the **Create Account** tab.")
+
+    with auth_tab_email_signup:
+        st.markdown("Create an account with email. You can connect Google Calendar later from the Calendar step.")
+        with st.form("email_signup"):
+            reg_name = st.text_input("Full Name")
+            reg_email = st.text_input("Email")
+            reg_username = st.text_input("Username (optional)", placeholder="e.g. johndoe42",
+                                         help="3-30 characters: letters, numbers, underscores. Friends can find you by this.")
+            reg_password = st.text_input("Password", type="password")
+            reg_password2 = st.text_input("Confirm Password", type="password")
+            if st.form_submit_button("Create Account", type="primary"):
+                if not reg_name or not reg_email or not reg_password:
+                    st.error("Please fill in all required fields.")
+                elif reg_password != reg_password2:
+                    st.error("Passwords don't match.")
+                elif len(reg_password) < 6:
+                    st.error("Password must be at least 6 characters.")
+                else:
+                    try:
+                        payload = {
+                            "name": reg_name,
+                            "email": reg_email,
+                            "password": reg_password,
+                        }
+                        if reg_username:
+                            payload["username"] = reg_username
+                        resp = httpx.post(f"{API_BASE}/auth/register", json=payload, timeout=10.0)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            st.session_state.auth_token = data["access_token"]
+                            st.session_state.auth_user = data["user"]
+                            st.session_state.user_id = data["user"]["id"]
+                            st.session_state.creator_user_id = data["user"]["id"]
+                            st.rerun()
+                        else:
+                            detail = resp.json().get("detail", "Registration failed")
+                            st.error(detail)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+    st.stop()
+
+# ══════════════════════════════════════════════════════════════════════
+# USERNAME SETUP — shown once if user has no username
+# ══════════════════════════════════════════════════════════════════════
+
+auth_user = st.session_state.auth_user or {}
+if not auth_user.get("username"):
+    st.markdown(
+        '<div class="hero"><h1>🎯 <span class="hero-accent">Rowboat</span></h1></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown('<div class="section-card" style="max-width:480px;margin:0 auto;">'
+                '<div class="section-title">Choose a username</div>'
+                '<div class="section-subtitle">Friends can find and add you by your username</div>'
+                '</div>', unsafe_allow_html=True)
+
+    with st.form("set_username"):
+        new_username = st.text_input("Username", placeholder="e.g. johndoe42",
+                                      help="3-30 characters: letters, numbers, underscores")
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.form_submit_button("Set Username", type="primary"):
+                if new_username:
+                    try:
+                        resp = httpx.post(
+                            f"{API_BASE}/auth/username",
+                            json={"username": new_username},
+                            headers={"Authorization": f"Bearer {st.session_state.auth_token}"},
+                            timeout=10.0,
+                        )
+                        if resp.status_code == 200:
+                            st.session_state.auth_user = resp.json()
+                            st.rerun()
+                        else:
+                            detail = resp.json().get("detail", "Failed")
+                            st.error(detail)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+        with col2:
+            if st.form_submit_button("Skip for now"):
+                st.session_state.auth_user["username"] = "__skipped__"
+                st.rerun()
+
+    st.stop()
+
+
+# ══════════════════════════════════════════════════════════════════════
+# MAIN APP — user is authenticated
+# ══════════════════════════════════════════════════════════════════════
+
 # ── Hero + Stepper ─────────────────────────────────────────────────────
 
-st.markdown('<div class="hero"><h1>🎯 <span class="hero-accent">Outing</span> Planner</h1>'
-            '<p>AI-powered group outing coordination — from preferences to a plan in under a minute</p></div>',
-            unsafe_allow_html=True)
+_display_name = auth_user.get("name", "")
+_display_username = auth_user.get("username", "")
+_username_tag = f' <span style="color:#6B7785;font-size:14px;">@{_display_username}</span>' if _display_username and _display_username != "__skipped__" else ""
+
+st.markdown(
+    f'<div class="hero"><h1>🎯 <span class="hero-accent">Outing</span> Planner</h1>'
+    f'<p>Welcome back, <strong>{_display_name}</strong>{_username_tag}</p></div>',
+    unsafe_allow_html=True,
+)
+
+# Sign-out button in the corner
+_signout_col1, _signout_col2 = st.columns([6, 1])
+with _signout_col2:
+    if st.button("Sign Out", key="signout_btn"):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
 
 # ── Avatar color helper ───────────────────────────────────────────────
 _AVATAR_COLORS = ["#FF690F", "#1DB954", "#4A90D9", "#9B59B6", "#E74C3C", "#F39C12", "#1ABC9C", "#34495E"]
@@ -266,6 +456,8 @@ if st.session_state.get("user_id"):
                 for friend in st.session_state.friends_list:
                     fname = friend.get("name", "Unknown")
                     femail = friend.get("email", "")
+                    fusername = friend.get("username", "")
+                    fsubtitle = f"@{fusername}" if fusername else femail
                     color = _avatar_color(fname)
                     initial = fname[0].upper() if fname else "?"
 
@@ -275,7 +467,7 @@ if st.session_state.get("user_id"):
                             f'<div class="friend-card">'
                             f'<div class="friend-avatar" style="background:{color}">{initial}</div>'
                             f'<div class="friend-info"><div class="friend-name">{fname}</div>'
-                            f'<div class="friend-email">{femail}</div></div>'
+                            f'<div class="friend-email">{fsubtitle}</div></div>'
                             f'<span class="friend-badge friend-badge-accepted">Friends</span>'
                             f'</div>',
                             unsafe_allow_html=True,
@@ -362,19 +554,31 @@ if st.session_state.get("user_id"):
                     )
 
         with tab_add:
-            st.markdown("Send a friend request by email. The other person must have created a group first so they're registered in the system.")
+            st.markdown("Add a friend by their **username** or **email address**.")
             form_key = f"add_friend_{st.session_state.friend_req_counter}"
             with st.form(form_key):
-                friend_email = st.text_input("Friend's Email", placeholder="friend@example.com")
+                add_method = st.radio("Find by", ["Username", "Email"], horizontal=True, label_visibility="collapsed")
+                if add_method == "Username":
+                    friend_username = st.text_input("Username", placeholder="e.g. johndoe42")
+                    friend_email = ""
+                else:
+                    friend_email = st.text_input("Email", placeholder="friend@example.com")
+                    friend_username = ""
                 send_btn = st.form_submit_button("Send Friend Request", type="primary")
-                if send_btn and friend_email:
+                if send_btn and (friend_email or friend_username):
                     try:
+                        payload = {}
+                        if friend_username:
+                            payload["to_username"] = friend_username
+                        else:
+                            payload["to_email"] = friend_email
                         resp = httpx.post(
                             f"{API_BASE}/friends/{st.session_state.user_id}/request",
-                            json={"to_email": friend_email}, timeout=5.0,
+                            json=payload, timeout=5.0,
                         )
                         resp.raise_for_status()
-                        st.success(f"Friend request sent to {friend_email}!")
+                        target_display = f"@{friend_username}" if friend_username else friend_email
+                        st.success(f"Friend request sent to {target_display}!")
                         st.session_state.friend_req_counter += 1
                         st.rerun()
                     except httpx.HTTPStatusError as e:
@@ -423,29 +627,32 @@ if step == 0:
                 unsafe_allow_html=True)
 
     if st.session_state.group_id is None:
-        # [FIX 1] Swap name/email — group name top-left, email top-right, name below group name
+        _me = st.session_state.auth_user or {}
+        _my_name = _me.get("name", "")
+        _my_email = _me.get("email", "")
+        _my_uid = _me.get("id", st.session_state.get("user_id", ""))
+        _my_uname = _me.get("username", "")
+        _uname_display = f" (@{_my_uname})" if _my_uname and _my_uname != "__skipped__" else ""
+
+        st.markdown(f"Creating group as **{_my_name}**{_uname_display} ({_my_email})")
+
         with st.form("create_group"):
-            col1, col2 = st.columns(2)
-            with col1:
-                group_name = st.text_input("Group Name", placeholder="Friday Night Crew")
-            with col2:
-                your_name = st.text_input("Your Name", placeholder="John Doe")
-            your_email = st.text_input("Your Email", placeholder="john@example.com")
-            submitted = st.form_submit_button("Create Group")
-            if submitted and group_name and your_name and your_email:
+            group_name = st.text_input("Group Name", placeholder="Friday Night Crew")
+            submitted = st.form_submit_button("Create Group", type="primary")
+            if submitted and group_name:
                 try:
                     resp = httpx.post(f"{API_BASE}/groups/",
-                                     json={"name": group_name, "creator_name": your_name, "creator_email": your_email})
+                                     json={"name": group_name, "creator_name": _my_name, "creator_email": _my_email})
                     resp.raise_for_status()
                     data = resp.json()
                     creator_uid = data["member_ids"][0]
                     st.session_state.group_id = data["id"]
                     st.session_state.user_id = creator_uid
                     st.session_state.creator_user_id = creator_uid
-                    st.session_state.members = [{"name": your_name, "email": your_email, "user_id": creator_uid}]
+                    st.session_state.members = [{"name": _my_name, "email": _my_email, "user_id": creator_uid}]
                     if "member_user_ids" not in st.session_state:
                         st.session_state.member_user_ids = {}
-                    st.session_state.member_user_ids[your_name] = creator_uid
+                    st.session_state.member_user_ids[_my_name] = creator_uid
                     _register_current_user()
                     st.rerun()
                 except Exception as e:

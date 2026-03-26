@@ -31,7 +31,11 @@ class AddMemberRequest(BaseModel):
 def _row_to_user(row: UserTable) -> User:
     prefs = UserPreferences(**json.loads(row.preferences)) if row.preferences else None
     token = json.loads(row.google_calendar_token) if row.google_calendar_token else None
-    return User(id=row.id, name=row.name, email=row.email, preferences=prefs, google_calendar_token=token)
+    return User(
+        id=row.id, name=row.name, email=row.email,
+        username=row.username, auth_provider=row.auth_provider,
+        preferences=prefs, google_calendar_token=token,
+    )
 
 
 async def _get_or_create_user(session: AsyncSession, name: str, email: str) -> UserTable:

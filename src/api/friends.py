@@ -19,7 +19,11 @@ router = APIRouter()
 def _row_to_user(row: UserTable) -> User:
     prefs = UserPreferences(**json.loads(row.preferences)) if row.preferences else None
     token = json.loads(row.google_calendar_token) if row.google_calendar_token else None
-    return User(id=row.id, name=row.name, email=row.email, preferences=prefs, google_calendar_token=token)
+    return User(
+        id=row.id, name=row.name, email=row.email,
+        username=row.username, auth_provider=row.auth_provider,
+        preferences=prefs, google_calendar_token=token,
+    )
 
 
 class RegisterUserRequest(BaseModel):
@@ -29,7 +33,8 @@ class RegisterUserRequest(BaseModel):
 
 
 class SendFriendRequestBody(BaseModel):
-    to_email: str
+    to_email: str | None = None
+    to_username: str | None = None
 
 
 class RespondFriendRequestBody(BaseModel):
@@ -81,12 +86,23 @@ async def send_friend_request(
     if not sender:
         raise HTTPException(status_code=404, detail="Sender not registered. Call /register first.")
 
-    target_result = await session.execute(
-        select(UserTable).where(UserTable.email == body.to_email)
-    )
-    target = target_result.scalar_one_or_none()
-    if not target:
-        raise HTTPException(status_code=404, detail=f"No user found with email {body.to_email}")
+    target = None
+    if body.to_username:
+        result = await session.execute(
+            select(UserTable).where(UserTable.username == body.to_username)
+        )
+        target = result.scalar_one_or_none()
+        if not target:
+            raise HTTPException(status_code=404, detail=f"No user found with username @{body.to_username}")
+    elif body.to_email:
+        result = await session.execute(
+            select(UserTable).where(UserTable.email == body.to_email)
+        )
+        target = result.scalar_one_or_none()
+        if not target:
+            raise HTTPException(status_code=404, detail=f"No user found with email {body.to_email}")
+    else:
+        raise HTTPException(status_code=400, detail="Provide either to_email or to_username")
     if target.id == user_id:
         raise HTTPException(status_code=400, detail="Cannot send a friend request to yourself")
 
