@@ -1,4 +1,4 @@
-"""FastAPI application for the Group Outing Planner."""
+"""FastAPI application for Rowboat."""
 
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(mes
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Outing Planner API",
-    description="AI-powered group outing coordination agent",
+    title="Rowboat API",
+    description="AI-powered group outing coordination platform",
     version="0.1.0",
 )
 
@@ -70,7 +70,7 @@ async def startup():
 
 @app.get("/")
 async def root():
-    return {"name": "Outing Planner API", "version": "0.1.0", "status": "running"}
+    return {"name": "Rowboat API", "version": "0.1.0", "status": "running"}
 
 
 @app.get("/health")

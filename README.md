@@ -1,6 +1,6 @@
-# Rowboat -- AI-Powered Group Outing Planner
+# Rowboat
 
-**Rowboat** is a multi-agent AI system that coordinates group outings end-to-end -- from collecting preferences to finding venues, scheduling across calendars, applying constraint-based ranking, and booking. Built as a course project for CMU 24-880 (AI Agents for Engineers) with commercial product aspirations.
+**Rowboat** is an AI-powered group outing coordination platform that handles everything end-to-end -- from collecting preferences to finding venues, scheduling across calendars, applying constraint-based ranking, and booking. Built as a course project for CMU 24-880 (AI Agents for Engineers) with commercial product aspirations.
 
 ## Features
 

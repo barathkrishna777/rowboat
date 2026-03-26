@@ -1,4 +1,4 @@
-"""Streamlit UI for the Group Outing Planner — single-page stepper flow."""
+"""Streamlit UI for Rowboat — single-page stepper flow."""
 
 import streamlit as st
 import httpx
@@ -16,7 +16,7 @@ MAPS_EMBED_KEY = os.getenv("GOOGLE_MAPS_EMBED_KEY", "")
 # ── Page Config ────────────────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="Outing Planner",
+    page_title="Rowboat",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -362,7 +362,7 @@ _display_username = auth_user.get("username", "")
 _username_tag = f' <span style="color:#6B7785;font-size:14px;">@{_display_username}</span>' if _display_username and _display_username != "__skipped__" else ""
 
 st.markdown(
-    f'<div class="hero"><h1>🎯 <span class="hero-accent">Outing</span> Planner</h1>'
+    f'<div class="hero"><h1>🚣 <span class="hero-accent">Row</span>boat</h1>'
     f'<p>Welcome back, <strong>{_display_name}</strong>{_username_tag}</p></div>',
     unsafe_allow_html=True,
 )

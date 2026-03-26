@@ -98,7 +98,7 @@ def build_report():
     # ══════════════════════════════════════════════════════════════
     story.append(Spacer(1, 1.5 * inch))
     story.append(Paragraph("Rowboat", styles["ReportTitle"]))
-    story.append(Paragraph("AI-Powered Group Outing Planner", styles["ReportSubtitle"]))
+    story.append(Paragraph("AI-Powered Group Outing Coordination Platform", styles["ReportSubtitle"]))
     story.append(Spacer(1, 0.3 * inch))
     story.append(HRFlowable(width="60%", thickness=2, color=ORANGE, spaceAfter=20))
     story.append(Spacer(1, 0.2 * inch))

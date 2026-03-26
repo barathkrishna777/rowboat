@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60 * 24 * 7  # 1 week
 
     # App Settings
-    database_url: str = "sqlite+aiosqlite:///./data/outing_planner.db"
+    database_url: str = "sqlite+aiosqlite:///./data/rowboat.db"
     chroma_persist_dir: str = "./data/chroma_db"
     default_location: str = "Pittsburgh, PA"
     default_timezone: str = "America/New_York"

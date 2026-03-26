@@ -1,7 +1,7 @@
 [project]
-name = "outing-planner"
+name = "rowboat"
 version = "0.1.0"
-description = "AI agent that coordinates group outings end-to-end"
+description = "AI-powered group outing coordination platform"
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.0",
