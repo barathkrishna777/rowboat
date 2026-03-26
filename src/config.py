@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
 
+    # Auth / JWT
+    jwt_secret: str = "change-me-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60 * 24 * 7  # 1 week
+
     # App Settings
     database_url: str = "sqlite+aiosqlite:///./data/outing_planner.db"
     chroma_persist_dir: str = "./data/chroma_db"

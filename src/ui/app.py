@@ -2,7 +2,6 @@
 
 import streamlit as st
 import httpx
-import random
 import urllib.parse
 from datetime import datetime, timedelta, time as dt_time
 # from streamlit_sortables import sort_items  # replaced with custom card reorder
@@ -147,7 +146,7 @@ st.markdown("""
 
 # ── Session State ──────────────────────────────────────────────────────
 
-STEPS = ["Create Group", "Preferences", "Calendar", "Find Venues", "Review & Book", "Booking Summary", "Feedback"]
+STEPS = ["Create Group", "Preferences", "Calendar", "Find Venues", "Review & Plan", "Plan Summary", "Feedback"]
 
 if "current_step" not in st.session_state:
     st.session_state.current_step = 0
@@ -183,7 +182,7 @@ def go_to_step(idx):
 # ── Hero + Stepper ─────────────────────────────────────────────────────
 
 st.markdown('<div class="hero"><h1>🎯 <span class="hero-accent">Outing</span> Planner</h1>'
-            '<p>AI-powered group outing coordination — from preferences to booking</p></div>',
+            '<p>AI-powered group outing coordination — from preferences to a plan in under a minute</p></div>',
             unsafe_allow_html=True)
 
 # ── Avatar color helper ───────────────────────────────────────────────
@@ -439,9 +438,14 @@ if step == 0:
                                      json={"name": group_name, "creator_name": your_name, "creator_email": your_email})
                     resp.raise_for_status()
                     data = resp.json()
+                    creator_uid = data["member_ids"][0]
                     st.session_state.group_id = data["id"]
-                    st.session_state.user_id = data["member_ids"][0]
-                    st.session_state.members = [{"name": your_name, "email": your_email}]
+                    st.session_state.user_id = creator_uid
+                    st.session_state.creator_user_id = creator_uid
+                    st.session_state.members = [{"name": your_name, "email": your_email, "user_id": creator_uid}]
+                    if "member_user_ids" not in st.session_state:
+                        st.session_state.member_user_ids = {}
+                    st.session_state.member_user_ids[your_name] = creator_uid
                     _register_current_user()
                     st.rerun()
                 except Exception as e:
@@ -465,7 +469,13 @@ if step == 0:
                     resp = httpx.post(f"{API_BASE}/groups/{st.session_state.group_id}/members",
                                      json={"name": name, "email": email})
                     resp.raise_for_status()
-                    st.session_state.members.append({"name": name, "email": email})
+                    data = resp.json()
+                    # The newest member_id is the last one in the list
+                    new_uid = data["member_ids"][-1] if data.get("member_ids") else ""
+                    st.session_state.members.append({"name": name, "email": email, "user_id": new_uid})
+                    if "member_user_ids" not in st.session_state:
+                        st.session_state.member_user_ids = {}
+                    st.session_state.member_user_ids[name] = new_uid
                     st.session_state.member_add_counter += 1
                     st.rerun()
                 except Exception as e:
@@ -658,19 +668,18 @@ if step == 0:
                                     {sv.get('explanation','')}</span>
                             </div>""", unsafe_allow_html=True)
 
-                # Accept & Book button
+                # Accept plan button
                 if rec_venue and rec_slot:
                     st.divider()
                     bc1, bc2 = st.columns([1, 1])
                     with bc1:
-                        if st.button("✅ Accept & Book This Plan", type="primary", use_container_width=True):
-                            # Store the accepted plan and jump to booking step
+                        if st.button("✅ Accept This Plan", type="primary", use_container_width=True):
                             st.session_state["accepted_plan"] = plan
-                            st.session_state.current_step = 5  # Booking Summary step
+                            st.session_state.current_step = 5  # Plan Summary step
                             st.session_state.completed_steps.update({0, 1, 2, 3, 4})
                             st.rerun()
                     with bc2:
-                        st.caption("This will create a Google Calendar event and send invites to all group members.")
+                        st.caption("You can send calendar invites on the next screen.")
 
                 # Option to continue with manual flow
                 st.divider()
@@ -734,29 +743,51 @@ elif step == 2:
         st.session_state.calendars_connected = {}
 
     members = st.session_state.get("members", [])
+
+    # Check real calendar connection status for each member via the API
+    member_user_ids = st.session_state.get("member_user_ids", {})
+    for member in members:
+        nm = member["name"]
+        uid = member_user_ids.get(nm) or member.get("user_id", "")
+        if uid and nm not in st.session_state.calendars_connected:
+            try:
+                status_resp = httpx.get(f"{API_BASE}/calendar/status/{uid}", timeout=5.0)
+                if status_resp.status_code == 200:
+                    st.session_state.calendars_connected[nm] = status_resp.json().get("connected", False)
+            except Exception:
+                pass
+
     all_connected = all(st.session_state.calendars_connected.get(m["name"], False) for m in members)
 
     st.subheader("📅 Connect Calendars")
 
-    # [FIX 2] Connect All button ABOVE the member list
     if not all_connected:
-        if st.button("🔗 Connect All Calendars", type="primary"):
-            for m in members:
-                st.session_state.calendars_connected[m["name"]] = True
-            st.rerun()
+        st.info("Connect your Google Calendar for real availability data. Members without a connected calendar will be assumed free.")
 
     for member in members:
         nm = member["name"]
         connected = st.session_state.calendars_connected.get(nm, False)
+        uid = member_user_ids.get(nm) or member.get("user_id", "")
         col1, col2 = st.columns([4, 1])
         with col1:
             if connected:
-                st.markdown(f'<span class="member-chip"><span class="dot"></span>{nm} — Connected</span>', unsafe_allow_html=True)
+                st.markdown(f'<span class="member-chip"><span class="dot"></span>{nm} — Connected ✓</span>', unsafe_allow_html=True)
             else:
                 st.markdown(f'<span class="member-chip">{nm} — Not connected</span>', unsafe_allow_html=True)
         with col2:
-            if not connected:
-                if st.button("Connect", key=f"cal_{nm}"):
+            if not connected and uid:
+                try:
+                    auth_resp = httpx.get(f"{API_BASE}/calendar/auth-url", params={"user_id": uid}, timeout=5.0)
+                    if auth_resp.status_code == 200:
+                        auth_url = auth_resp.json().get("auth_url", "")
+                        if auth_url:
+                            st.link_button("Connect Google", auth_url, use_container_width=True)
+                except Exception:
+                    if st.button("Connect", key=f"cal_{nm}"):
+                        st.session_state.calendars_connected[nm] = True
+                        st.rerun()
+            elif not connected:
+                if st.button("Skip (assume free)", key=f"cal_{nm}"):
                     st.session_state.calendars_connected[nm] = True
                     st.rerun()
 
@@ -779,42 +810,87 @@ elif step == 2:
     min_hours = st.slider("Minimum outing duration (hours)", 1, 6, 2)
 
     if st.button("🔍 Find Available Times", type="primary"):
+        member_user_ids = st.session_state.get("member_user_ids", {})
+        user_ids_list = []
+        for m in members:
+            uid = member_user_ids.get(m["name"]) or m.get("user_id", "")
+            if uid:
+                user_ids_list.append(uid)
+
+        # Try the real calendar availability API first
+        api_slots = []
+        use_real_api = bool(user_ids_list)
+        if use_real_api:
+            try:
+                avail_resp = httpx.post(
+                    f"{API_BASE}/calendar/availability",
+                    json={
+                        "user_ids": user_ids_list,
+                        "start_date": start_date.isoformat(),
+                        "end_date": end_date.isoformat(),
+                        "min_duration_hours": float(min_hours),
+                        "preferred_start_hour": earliest_time.hour,
+                        "preferred_end_hour": latest_time.hour,
+                    },
+                    timeout=30.0,
+                )
+                if avail_resp.status_code == 200:
+                    avail_data = avail_resp.json()
+                    api_slots = avail_data.get("slots", [])
+                    connected = avail_data.get("connected_users", [])
+                    simulated = avail_data.get("simulated_users", [])
+                    if connected:
+                        st.success(f"Real calendar data used for: {', '.join(connected)}")
+                    if simulated:
+                        st.caption(f"Assumed always free (no calendar connected): {', '.join(simulated)}")
+            except Exception:
+                use_real_api = False
+
+        # Build slot list from API response or fallback to local generation
         slots = []
-        current = datetime.combine(start_date, datetime.min.time())
-        end_dt = datetime.combine(end_date, datetime.min.time())
-        while current <= end_dt:
-            slot_start_hour = earliest_time.hour
+        if api_slots:
+            for s in api_slots:
+                sd = datetime.fromisoformat(s["start_iso"])
+                ed = datetime.fromisoformat(s["end_iso"])
+                slot_start_hour = sd.hour
+                slot_end_hour = ed.hour if ed.date() == sd.date() else ed.hour + 24
 
-            # [FIX 3] Handle overnight wrap
-            if wraps_overnight:
-                slot_end_hour = latest_time.hour + 24  # e.g., 1am = 25
-            else:
-                slot_end_hour = latest_time.hour
-
-            duration = slot_end_hour - slot_start_hour
-            if duration >= min_hours:
-                busy_per_member = {}
-                for m in members:
-                    member_busy = []
-                    for _ in range(random.randint(0, 2)):
-                        bh = random.randint(slot_start_hour, max(slot_start_hour, slot_end_hour - 2))
-                        member_busy.append({"start": bh, "end": min(bh + random.randint(1, 2), slot_end_hour)})
-                    busy_per_member[m["name"]] = member_busy
-
-                # Store actual datetimes (end may be next day)
-                actual_end = current.replace(hour=slot_end_hour % 24)
-                if wraps_overnight:
-                    actual_end += timedelta(days=1)
-
+                busy_per_member = {m["name"]: [] for m in members}
                 slots.append({
-                    "start": current.replace(hour=slot_start_hour).isoformat(),
-                    "end": actual_end.isoformat(),
+                    "start": sd.isoformat(),
+                    "end": ed.isoformat(),
                     "start_h": slot_start_hour,
-                    "end_h": slot_end_hour,  # may be >24
+                    "end_h": slot_end_hour,
                     "users": [m["name"] for m in members],
                     "busy_per_member": busy_per_member,
                 })
-            current += timedelta(days=1)
+        else:
+            current = datetime.combine(start_date, datetime.min.time())
+            end_dt = datetime.combine(end_date, datetime.min.time())
+            while current <= end_dt:
+                slot_start_hour = earliest_time.hour
+                if wraps_overnight:
+                    slot_end_hour = latest_time.hour + 24
+                else:
+                    slot_end_hour = latest_time.hour
+
+                duration = slot_end_hour - slot_start_hour
+                if duration >= min_hours:
+                    busy_per_member = {m["name"]: [] for m in members}
+
+                    actual_end = current.replace(hour=slot_end_hour % 24)
+                    if wraps_overnight:
+                        actual_end += timedelta(days=1)
+
+                    slots.append({
+                        "start": current.replace(hour=slot_start_hour).isoformat(),
+                        "end": actual_end.isoformat(),
+                        "start_h": slot_start_hour,
+                        "end_h": slot_end_hour,
+                        "users": [m["name"] for m in members],
+                        "busy_per_member": busy_per_member,
+                    })
+                current += timedelta(days=1)
 
         st.session_state["available_slots"] = slots
         if "slot_order" in st.session_state:
@@ -1100,8 +1176,8 @@ elif step == 3:
 # STEP 4: REVIEW & BOOK
 # ════════════════════════════════════════════════════════════════════════
 elif step == 4:
-    st.markdown('<div class="section-card"><div class="section-title">Review & Book</div>'
-                '<div class="section-subtitle">Review your selections with calendar and map views, then book</div></div>',
+    st.markdown('<div class="section-card"><div class="section-title">Review & Plan</div>'
+                '<div class="section-subtitle">Review your selections with calendar and map views, then finalize your plan</div></div>',
                 unsafe_allow_html=True)
 
     search_result = st.session_state.get("search_result")
@@ -1154,7 +1230,7 @@ elif step == 4:
 
     with left_col:
         st.subheader("Your Itinerary")
-        st.caption("Click on a card to select it as your final booking. The right panel previews the focused card.")
+        st.caption("Click on a card to select your venue. The right panel previews the focused card.")
         tier_cost = {"$": 12, "$$": 25, "$$$": 55, "$$$$": 90}
 
         for item in itinerary_items:
@@ -1327,11 +1403,10 @@ elif step == 4:
     st.divider()
     sel_idx = st.session_state.selected_booking
     if sel_idx is None:
-        st.warning("👆 Please click on a card above to select it as your final booking.")
+        st.warning("👆 Please select a venue above to finalize your plan.")
     else:
         chosen = itinerary_items[sel_idx]
         chosen_v = chosen["venue"]
-        # Get the slot chosen via dropdown for this venue
         chosen_slot_idx = st.session_state.venue_slot_choices.get(sel_idx, 0)
         if chosen_slot_idx >= len(valid_slots):
             chosen_slot_idx = 0
@@ -1343,9 +1418,9 @@ elif step == 4:
             ed = datetime.fromisoformat(chosen_s["end"])
             slot_str = f"{sd.strftime('%a %b %d, %I:%M %p')} – {ed.strftime('%I:%M %p')}"
 
-        col1, _ = st.columns(2)
+        col1, col2 = st.columns(2)
         with col1:
-            if st.button("📅  Book & Send Invites", type="primary", use_container_width=True):
+            if st.button("✅  Confirm Plan & Send Calendar Invites", type="primary", use_container_width=True):
                 st.session_state["booked"] = True
                 st.session_state["booked_venues"] = [chosen_v]
                 st.session_state["booked_item"] = {
@@ -1359,6 +1434,12 @@ elif step == 4:
                 st.balloons()
                 advance_step()
                 st.rerun()
+        with col2:
+            # Deep-link to venue on Google Maps for manual reservation
+            venue_name = chosen_v.get("name", "")
+            venue_addr = chosen_v.get("address", "")
+            maps_query = urllib.parse.quote(f"{venue_name} {venue_addr}")
+            st.link_button("📍 Open on Google Maps", f"https://www.google.com/maps/search/?api=1&query={maps_query}", use_container_width=True)
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -1403,17 +1484,17 @@ elif step == 5:
         st.warning("No plan selected. Go back and generate a plan first.")
         st.stop()
 
-    # Header depends on booking state
+    # Header depends on plan state
     if already_booked:
-        st.markdown('<div class="section-card"><div class="section-title">🎉 Booking Confirmed!</div>'
-                    '<div class="section-subtitle">Here\'s a summary of your group outing reservation</div></div>',
+        st.markdown('<div class="section-card"><div class="section-title">🎉 Plan Confirmed!</div>'
+                    '<div class="section-subtitle">Here\'s a summary of your group outing plan</div></div>',
                     unsafe_allow_html=True)
         if st.session_state.get("calendar_invites_sent"):
             st.success("Calendar invites have been sent to all group members!")
         else:
-            st.success("Booking confirmed! Connect Google Calendar to send invites automatically.")
+            st.success("Plan confirmed! Connect Google Calendar to send invites automatically.")
     else:
-        st.markdown('<div class="section-card"><div class="section-title">📋 Review & Book</div>'
+        st.markdown('<div class="section-card"><div class="section-title">📋 Confirm & Coordinate</div>'
                     '<div class="section-subtitle">Confirm your outing details and send calendar invites</div></div>',
                     unsafe_allow_html=True)
 
@@ -1422,7 +1503,7 @@ elif step == 5:
     st.markdown(f"**Group:** {members_html}", unsafe_allow_html=True)
 
     st.divider()
-    st.subheader("📋 Reservation Details")
+    st.subheader("📋 Plan Details")
 
     cats = venue.get("categories", [])
     badges = "".join(f'<span class="venue-badge">{c}</span>' for c in cats[:3])
@@ -1456,6 +1537,18 @@ elif step == 5:
             </iframe>
         </div>""", unsafe_allow_html=True)
 
+    # Venue deep-links for manual reservation
+    maps_link = f"https://www.google.com/maps/search/?api=1&query={query_str}"
+    yelp_link = f"https://www.yelp.com/search?find_desc={urllib.parse.quote(venue_name)}&find_loc={urllib.parse.quote(addr)}"
+    link_cols = st.columns(3)
+    with link_cols[0]:
+        st.link_button("📍 Google Maps", maps_link, use_container_width=True)
+    with link_cols[1]:
+        st.link_button("⭐ Search on Yelp", yelp_link, use_container_width=True)
+    with link_cols[2]:
+        google_q = urllib.parse.quote(f"{venue_name} {addr} reservations")
+        st.link_button("🔗 Find Reservations", f"https://www.google.com/search?q={google_q}", use_container_width=True)
+
     st.divider()
 
     # Cost summary
@@ -1477,7 +1570,7 @@ elif step == 5:
         """, unsafe_allow_html=True)
         st.divider()
 
-    # Booking action
+    # Plan confirmation action
     if not already_booked:
         attendee_emails = [m.get("email", "") for m in members if m.get("email")]
         attendee_emails = [e for e in attendee_emails if e]
@@ -1485,10 +1578,10 @@ elif step == 5:
         if attendee_emails:
             st.caption(f"Calendar invites will be sent to: {', '.join(attendee_emails)}")
 
-        bc1, bc2 = st.columns(2)
+        bc1, bc2, bc3 = st.columns(3)
         with bc1:
             if organizer_connected and start_iso and end_iso:
-                if st.button("📅 Book & Send Calendar Invites", type="primary", use_container_width=True):
+                if st.button("📅 Confirm & Send Calendar Invites", type="primary", use_container_width=True):
                     with st.spinner("Creating calendar event..."):
                         try:
                             api_base = API_BASE.replace("/api", "")
@@ -1511,25 +1604,31 @@ elif step == 5:
                             st.session_state["booking_confirmed"] = True
                             st.session_state["calendar_invites_sent"] = True
                             st.balloons()
-                            st.success(result.get("message", "Booked!"))
+                            st.success(result.get("message", "Plan confirmed!"))
                             if result.get("calendar_link"):
                                 st.markdown(f"[Open in Google Calendar]({result['calendar_link']})")
                             st.rerun()
                         except httpx.HTTPStatusError as e:
                             detail = e.response.json().get("detail", str(e))
-                            st.error(f"Booking failed: {detail}")
+                            st.error(f"Failed: {detail}")
                         except Exception as e:
-                            st.error(f"Booking failed: {e}")
+                            st.error(f"Failed: {e}")
             else:
-                if st.button("✅ Confirm Booking", type="primary", use_container_width=True):
+                if st.button("✅ Confirm Plan", type="primary", use_container_width=True):
                     st.session_state["booking_confirmed"] = True
                     st.balloons()
-                    st.success("Itinerary booked!")
+                    st.success("Plan confirmed!")
                     if not organizer_connected:
-                        st.info("Connect your Google Calendar to also send calendar invites.")
+                        st.info("Connect your Google Calendar to send calendar invites automatically.")
                     st.rerun()
         with bc2:
-            if st.button("← Back to Plan", use_container_width=True):
+            # Deep-link to venue for manual reservation
+            v_name = venue.get("name", "")
+            v_addr = venue.get("address", "")
+            maps_q = urllib.parse.quote(f"{v_name} {v_addr}")
+            st.link_button("📍 Open on Google Maps", f"https://www.google.com/maps/search/?api=1&query={maps_q}", use_container_width=True)
+        with bc3:
+            if st.button("← Back", use_container_width=True):
                 st.session_state.current_step = 0
                 st.rerun()
 
@@ -1552,7 +1651,7 @@ elif step == 6:
 
     booked = st.session_state.get("booked_venues", [])
     if not booked:
-        st.info("No booked outings to review yet.")
+        st.info("No planned outings to review yet.")
         st.stop()
 
     with st.form("feedback_form"):

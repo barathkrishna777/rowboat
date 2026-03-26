@@ -1,27 +1,25 @@
-"""Friend management API endpoints."""
+"""Friend management API endpoints — persisted to SQLite via SQLAlchemy."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+import json
 
-from src.models.user import Friendship, FriendshipStatus, User
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.db.database import get_session
+from src.db.tables import FriendshipTable, UserTable
+from src.models.user import Friendship, FriendshipStatus, User, UserPreferences
 
 router = APIRouter()
 
-# In-memory stores matching the MVP pattern used by groups/preferences
-_users: dict[str, User] = {}
-_friendships: dict[int, Friendship] = {}
-_friendship_counter = 0
 
-
-def _get_or_register_user(user_id: str, name: str = "", email: str = "") -> User:
-    """Retrieve an existing user or register a new one from session data."""
-    if user_id in _users:
-        return _users[user_id]
-    user = User(id=user_id, name=name or "Unknown", email=email or "")
-    _users[user_id] = user
-    return user
+def _row_to_user(row: UserTable) -> User:
+    prefs = UserPreferences(**json.loads(row.preferences)) if row.preferences else None
+    token = json.loads(row.google_calendar_token) if row.google_calendar_token else None
+    return User(id=row.id, name=row.name, email=row.email, preferences=prefs, google_calendar_token=token)
 
 
 class RegisterUserRequest(BaseModel):
@@ -42,121 +40,175 @@ class RespondFriendRequestBody(BaseModel):
 
 
 @router.post("/register", response_model=User)
-async def register_user(req: RegisterUserRequest):
+async def register_user(req: RegisterUserRequest, session: AsyncSession = Depends(get_session)):
     """Register or update a user so they can be found by email."""
-    user = User(id=req.user_id, name=req.name, email=req.email)
-    _users[req.user_id] = user
-    return user
+    row = await session.get(UserTable, req.user_id)
+    if row:
+        row.name = req.name
+        row.email = req.email
+    else:
+        from src.api.groups import _get_or_create_user
+        row = await _get_or_create_user(session, req.name, req.email)
+    await session.commit()
+    return _row_to_user(row)
 
 
 @router.get("/search", response_model=list[User])
-async def search_users(q: str = ""):
+async def search_users(q: str = "", session: AsyncSession = Depends(get_session)):
     """Search registered users by name or email."""
     if not q or len(q) < 2:
         return []
-    q_lower = q.lower()
-    return [
-        u for u in _users.values()
-        if q_lower in u.name.lower() or q_lower in u.email.lower()
-    ]
+    q_lower = f"%{q.lower()}%"
+    result = await session.execute(
+        select(UserTable).where(
+            UserTable.name.ilike(q_lower) | UserTable.email.ilike(q_lower)
+        )
+    )
+    return [_row_to_user(r) for r in result.scalars().all()]
 
 
 # ── Friend requests ───────────────────────────────────────────────────
 
 
 @router.post("/{user_id}/request", response_model=Friendship)
-async def send_friend_request(user_id: str, body: SendFriendRequestBody):
+async def send_friend_request(
+    user_id: str,
+    body: SendFriendRequestBody,
+    session: AsyncSession = Depends(get_session),
+):
     """Send a friend request to another user by email."""
-    global _friendship_counter
-
-    if user_id not in _users:
+    sender = await session.get(UserTable, user_id)
+    if not sender:
         raise HTTPException(status_code=404, detail="Sender not registered. Call /register first.")
 
-    target = next((u for u in _users.values() if u.email.lower() == body.to_email.lower()), None)
+    target_result = await session.execute(
+        select(UserTable).where(UserTable.email == body.to_email)
+    )
+    target = target_result.scalar_one_or_none()
     if not target:
         raise HTTPException(status_code=404, detail=f"No user found with email {body.to_email}")
     if target.id == user_id:
         raise HTTPException(status_code=400, detail="Cannot send a friend request to yourself")
 
-    # Check for existing friendship in either direction
-    for f in _friendships.values():
-        pair = {f.requester_id, f.addressee_id}
-        if pair == {user_id, target.id}:
-            if f.status == FriendshipStatus.ACCEPTED:
-                raise HTTPException(status_code=400, detail="Already friends")
-            if f.status == FriendshipStatus.PENDING:
-                raise HTTPException(status_code=400, detail="Friend request already pending")
+    existing_result = await session.execute(
+        select(FriendshipTable).where(
+            ((FriendshipTable.requester_id == user_id) & (FriendshipTable.addressee_id == target.id))
+            | ((FriendshipTable.requester_id == target.id) & (FriendshipTable.addressee_id == user_id))
+        )
+    )
+    existing = existing_result.scalar_one_or_none()
+    if existing:
+        if existing.status == "accepted":
+            raise HTTPException(status_code=400, detail="Already friends")
+        if existing.status == "pending":
+            raise HTTPException(status_code=400, detail="Friend request already pending")
 
-    _friendship_counter += 1
-    friendship = Friendship(
-        id=_friendship_counter,
+    row = FriendshipTable(requester_id=user_id, addressee_id=target.id, status="pending")
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+
+    return Friendship(
+        id=row.id,
         requester_id=user_id,
         addressee_id=target.id,
         status=FriendshipStatus.PENDING,
-        requester=_users.get(user_id),
-        addressee=target,
+        requester=_row_to_user(sender),
+        addressee=_row_to_user(target),
     )
-    _friendships[_friendship_counter] = friendship
-    return friendship
 
 
 @router.post("/{user_id}/respond/{friendship_id}", response_model=Friendship)
-async def respond_to_request(user_id: str, friendship_id: int, body: RespondFriendRequestBody):
+async def respond_to_request(
+    user_id: str,
+    friendship_id: int,
+    body: RespondFriendRequestBody,
+    session: AsyncSession = Depends(get_session),
+):
     """Accept or decline a friend request."""
-    friendship = _friendships.get(friendship_id)
-    if not friendship:
+    row = await session.get(FriendshipTable, friendship_id)
+    if not row:
         raise HTTPException(status_code=404, detail="Friend request not found")
-    if friendship.addressee_id != user_id:
+    if row.addressee_id != user_id:
         raise HTTPException(status_code=403, detail="Only the addressee can respond")
-    if friendship.status != FriendshipStatus.PENDING:
+    if row.status != "pending":
         raise HTTPException(status_code=400, detail="Request already resolved")
 
-    friendship.status = FriendshipStatus.ACCEPTED if body.accept else FriendshipStatus.DECLINED
-    friendship.requester = _users.get(friendship.requester_id)
-    friendship.addressee = _users.get(friendship.addressee_id)
-    return friendship
+    row.status = "accepted" if body.accept else "declined"
+    await session.commit()
+
+    requester = await session.get(UserTable, row.requester_id)
+    addressee = await session.get(UserTable, row.addressee_id)
+    return Friendship(
+        id=row.id,
+        requester_id=row.requester_id,
+        addressee_id=row.addressee_id,
+        status=FriendshipStatus(row.status),
+        requester=_row_to_user(requester) if requester else None,
+        addressee=_row_to_user(addressee) if addressee else None,
+    )
 
 
 # ── Friend list & pending requests ────────────────────────────────────
 
 
 @router.get("/{user_id}/friends", response_model=list[User])
-async def get_friends(user_id: str):
+async def get_friends(user_id: str, session: AsyncSession = Depends(get_session)):
     """Get all accepted friends for a user."""
+    result = await session.execute(
+        select(FriendshipTable).where(
+            ((FriendshipTable.requester_id == user_id) | (FriendshipTable.addressee_id == user_id))
+            & (FriendshipTable.status == "accepted")
+        )
+    )
     friends: list[User] = []
-    for f in _friendships.values():
-        if f.status != FriendshipStatus.ACCEPTED:
-            continue
-        if f.requester_id == user_id:
-            friend = _users.get(f.addressee_id)
-        elif f.addressee_id == user_id:
-            friend = _users.get(f.requester_id)
-        else:
-            continue
-        if friend:
-            friends.append(friend)
+    for row in result.scalars().all():
+        friend_id = row.addressee_id if row.requester_id == user_id else row.requester_id
+        user_row = await session.get(UserTable, friend_id)
+        if user_row:
+            friends.append(_row_to_user(user_row))
     return friends
 
 
 @router.get("/{user_id}/requests/incoming", response_model=list[Friendship])
-async def get_incoming_requests(user_id: str):
+async def get_incoming_requests(user_id: str, session: AsyncSession = Depends(get_session)):
     """Get pending friend requests received by user."""
+    result = await session.execute(
+        select(FriendshipTable).where(
+            (FriendshipTable.addressee_id == user_id) & (FriendshipTable.status == "pending")
+        )
+    )
     incoming = []
-    for f in _friendships.values():
-        if f.addressee_id == user_id and f.status == FriendshipStatus.PENDING:
-            f.requester = _users.get(f.requester_id)
-            incoming.append(f)
+    for row in result.scalars().all():
+        requester = await session.get(UserTable, row.requester_id)
+        incoming.append(Friendship(
+            id=row.id,
+            requester_id=row.requester_id,
+            addressee_id=row.addressee_id,
+            status=FriendshipStatus.PENDING,
+            requester=_row_to_user(requester) if requester else None,
+        ))
     return incoming
 
 
 @router.get("/{user_id}/requests/outgoing", response_model=list[Friendship])
-async def get_outgoing_requests(user_id: str):
+async def get_outgoing_requests(user_id: str, session: AsyncSession = Depends(get_session)):
     """Get pending friend requests sent by user."""
+    result = await session.execute(
+        select(FriendshipTable).where(
+            (FriendshipTable.requester_id == user_id) & (FriendshipTable.status == "pending")
+        )
+    )
     outgoing = []
-    for f in _friendships.values():
-        if f.requester_id == user_id and f.status == FriendshipStatus.PENDING:
-            f.addressee = _users.get(f.addressee_id)
-            outgoing.append(f)
+    for row in result.scalars().all():
+        addressee = await session.get(UserTable, row.addressee_id)
+        outgoing.append(Friendship(
+            id=row.id,
+            requester_id=row.requester_id,
+            addressee_id=row.addressee_id,
+            status=FriendshipStatus.PENDING,
+            addressee=_row_to_user(addressee) if addressee else None,
+        ))
     return outgoing
 
 
@@ -164,14 +216,17 @@ async def get_outgoing_requests(user_id: str):
 
 
 @router.delete("/{user_id}/friends/{friend_id}")
-async def remove_friend(user_id: str, friend_id: str):
+async def remove_friend(user_id: str, friend_id: str, session: AsyncSession = Depends(get_session)):
     """Remove an existing friendship."""
-    to_remove = None
-    for fid, f in _friendships.items():
-        if f.status == FriendshipStatus.ACCEPTED and {f.requester_id, f.addressee_id} == {user_id, friend_id}:
-            to_remove = fid
-            break
-    if to_remove is None:
+    result = await session.execute(
+        select(FriendshipTable).where(
+            ((FriendshipTable.requester_id == user_id) & (FriendshipTable.addressee_id == friend_id))
+            | ((FriendshipTable.requester_id == friend_id) & (FriendshipTable.addressee_id == user_id))
+        )
+    )
+    row = result.scalar_one_or_none()
+    if not row:
         raise HTTPException(status_code=404, detail="Friendship not found")
-    del _friendships[to_remove]
+    await session.delete(row)
+    await session.commit()
     return {"detail": "Friend removed"}

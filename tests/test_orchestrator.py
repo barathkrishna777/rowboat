@@ -15,7 +15,7 @@ def test_quick_plan_request_defaults():
     assert req.request == "bowling night"
     assert req.location == "Pittsburgh, PA"
     assert req.members == []
-    assert req.earliest_time == "17:00"
+    assert req.earliest_time == "09:00"
     assert req.latest_time == "23:00"
 
 

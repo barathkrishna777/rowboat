@@ -12,3 +12,5 @@ google-api-python-client>=2.0
 beautifulsoup4>=4.12
 python-dotenv>=1.0
 chromadb>=0.4
+passlib[bcrypt]>=1.7
+python-jose[cryptography]>=3.3

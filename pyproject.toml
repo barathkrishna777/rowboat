@@ -19,6 +19,8 @@ dependencies = [
     "google-api-python-client>=2.0",
     "beautifulsoup4>=4.12",
     "python-dotenv>=1.0",
+    "passlib[bcrypt]>=1.7",
+    "python-jose[cryptography]>=3.3",
 ]
 
 [project.optional-dependencies]
