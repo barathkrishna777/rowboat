@@ -20,7 +20,7 @@ SCOPES = [
 def _get_redirect_uri() -> str:
     """Return the OAuth redirect URI based on environment."""
     import os
-    base = os.environ.get("API_BASE_URL", "http://localhost:8000")
+    base = os.environ.get("API_BASE_URL", "http://localhost:8000").rstrip("/")
     return f"{base}/api/calendar/callback"
 
 
