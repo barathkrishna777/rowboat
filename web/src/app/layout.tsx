@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
+import { DarkModeProvider, DarkModeToggle } from "@/lib/dark-mode";
 
 export const metadata: Metadata = {
   title: "Rowboat",
@@ -10,19 +11,23 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-gray-50 text-gray-900 min-h-screen">
-        <AuthProvider>
-          <nav className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-            <a href="/" className="text-xl font-bold text-orange-500">Rowboat</a>
-            <div className="flex gap-4 text-sm">
-              <a href="/plan" className="hover:text-orange-500 font-semibold">Plan Outing</a>
-              <a href="/swipe" className="hover:text-orange-500">Discover</a>
-              <a href="/friends" className="hover:text-orange-500">Friends</a>
-              <a href="/profile" className="hover:text-orange-500">Profile</a>
-            </div>
-          </nav>
-          <main className="max-w-2xl mx-auto px-4 py-8">{children}</main>
-        </AuthProvider>
+      <body className="min-h-screen" style={{ backgroundColor: "var(--bg)", color: "var(--text)" }}>
+        <DarkModeProvider>
+          <AuthProvider>
+            <nav className="border-b px-6 py-3 flex items-center justify-between"
+              style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}>
+              <a href="/" className="text-xl font-bold text-orange-500">Rowboat</a>
+              <div className="flex items-center gap-4 text-sm">
+                <a href="/plan" className="font-semibold hover:text-orange-500">Plan Outing</a>
+                <a href="/swipe" className="hover:text-orange-500">Discover</a>
+                <a href="/friends" className="hover:text-orange-500">Friends</a>
+                <a href="/profile" className="hover:text-orange-500">Profile</a>
+                <DarkModeToggle />
+              </div>
+            </nav>
+            <main className="max-w-2xl mx-auto px-4 py-8">{children}</main>
+          </AuthProvider>
+        </DarkModeProvider>
       </body>
     </html>
   );

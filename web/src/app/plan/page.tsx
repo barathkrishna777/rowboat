@@ -23,6 +23,8 @@ import {
   groups as groupsApi,
   plans as plansApi,
   calendar as calendarApi,
+  configStatus,
+  ConfigStatus,
   Group,
   Venue,
   ScoredVenue,
@@ -144,6 +146,7 @@ function PlanPageInner() {
 
   const [step, setStep] = useState(1);
   const [globalError, setGlobalError] = useState("");
+  const [configSt, setConfigSt] = useState<ConfigStatus | null>(null);
 
   // Step 1 — Group
   const [group, setGroup] = useState<Group | null>(null);
@@ -188,6 +191,7 @@ function PlanPageInner() {
   // Pre-load group from ?group_id query param (deep-link from swipe flow)
   useEffect(() => {
     if (!loading && !user) { router.replace("/login"); return; }
+    configStatus().then(setConfigSt).catch(() => {});
     const gid = searchParams.get("group_id");
     if (gid && user && !group) {
       groupsApi.get(gid).then(async g => {
@@ -353,8 +357,27 @@ function PlanPageInner() {
         ))}
       </div>
 
+      {/* API key config warning */}
+      {configSt && !configSt.gemini && (
+        <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-4 text-sm dark:bg-amber-950 dark:border-amber-700">
+          <p className="font-semibold text-amber-800 dark:text-amber-300">⚠️ AI features need a Gemini API key</p>
+          <p className="text-amber-700 dark:text-amber-400 mt-1">
+            Add <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">GEMINI_API_KEY=your_key</code> to{" "}
+            <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">.env</code> then restart the API server.
+            Get a free key at{" "}
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
+              className="underline text-amber-800 dark:text-amber-300">aistudio.google.com/apikey</a>.
+          </p>
+          {!configSt.yelp && !configSt.eventbrite && !configSt.ticketmaster && (
+            <p className="text-amber-600 dark:text-amber-500 mt-1 text-xs">
+              Venue search APIs (Yelp, Eventbrite, Ticketmaster) are also unconfigured — search will return no results.
+            </p>
+          )}
+        </div>
+      )}
+
       {globalError && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-red-600 text-sm">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-red-600 text-sm dark:bg-red-950 dark:border-red-800 dark:text-red-400">
           {globalError}
         </div>
       )}
@@ -536,16 +559,36 @@ function PlanPageInner() {
                   <p className="text-xs mt-1 text-blue-500">Sources: {searchResult.sources_searched.join(", ")}</p>
                 )}
               </div>
-              <p className="text-sm font-medium text-gray-600">{searchResult.venues.length} venues found</p>
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {searchResult.venues.map((v, i) => (
-                  <VenueCard key={i} venue={v} />
-                ))}
-              </div>
-              <button onClick={() => { setStep(4); handleRank(); }}
-                className="w-full bg-orange-500 text-white rounded-lg py-2.5 font-semibold hover:bg-orange-600">
-                Rank &amp; Score These Venues →
-              </button>
+              <p className="text-sm font-medium text-gray-600 dark:text-slate-300">
+                {searchResult.venues.length} venue{searchResult.venues.length !== 1 ? "s" : ""} found
+              </p>
+              {searchResult.venues.length === 0 ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950 dark:border-amber-700 p-4 text-sm text-amber-700 dark:text-amber-300 space-y-1">
+                  <p className="font-semibold">No venues returned by any source.</p>
+                  {configSt && !configSt.gemini && (
+                    <p>The AI search agent requires a <strong>GEMINI_API_KEY</strong> — see the warning above.</p>
+                  )}
+                  {configSt && !configSt.yelp && !configSt.google_places && (
+                    <p>No venue API keys are configured. Add Yelp or Google Places keys to <code>.env</code>.</p>
+                  )}
+                  <p>Try rephrasing your query, or{" "}
+                    <button onClick={handleOrchestrate} className="underline font-medium">let AI plan everything</button>
+                    {" "}once keys are configured.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {searchResult.venues.map((v, i) => (
+                      <VenueCard key={i} venue={v} />
+                    ))}
+                  </div>
+                  <button onClick={() => { setStep(4); handleRank(); }}
+                    className="w-full bg-orange-500 text-white rounded-lg py-2.5 font-semibold hover:bg-orange-600">
+                    Rank &amp; Score These Venues →
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>

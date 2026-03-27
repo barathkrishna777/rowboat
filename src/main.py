@@ -75,6 +75,25 @@ async def root():
     return {"name": "Rowboat API", "version": "0.1.0", "status": "running"}
 
 
+def _key_set(value: str) -> bool:
+    """True only if the value is a real key — not empty and not a placeholder."""
+    return bool(value) and not value.startswith("your_")
+
+
+@app.get("/api/config/status")
+async def config_status():
+    """Return which optional integrations are configured (no secrets exposed)."""
+    gemini = _key_set(settings.gemini_api_key) or _key_set(settings.google_api_key)
+    return {
+        "gemini": gemini,
+        "yelp": _key_set(settings.yelp_api_key),
+        "eventbrite": _key_set(settings.eventbrite_api_key),
+        "ticketmaster": _key_set(settings.ticketmaster_api_key),
+        "google_places": gemini,  # Gemini is also used as Places fallback
+        "google_calendar": _key_set(settings.google_client_id) and _key_set(settings.google_client_secret),
+    }
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}

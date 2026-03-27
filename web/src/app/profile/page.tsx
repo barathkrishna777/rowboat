@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { profile as profileApi } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import { cls } from "@/lib/ui";
 
 export default function ProfilePage() {
   const { user, loading } = useAuth();
@@ -43,28 +44,24 @@ export default function ProfilePage() {
     <div className="max-w-md mx-auto">
       <h1 className="text-2xl font-bold mb-6">Your Profile</h1>
       <form onSubmit={handleSave} className="flex flex-col gap-4">
-        <label className="text-sm font-medium text-gray-600">Display Name</label>
-        <input
-          value={displayName} onChange={(e) => setDisplayName(e.target.value)}
-          placeholder={user.name}
-          className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-orange-500"
-        />
-        <label className="text-sm font-medium text-gray-600">Bio</label>
-        <textarea
-          value={bio} onChange={(e) => setBio(e.target.value)}
-          placeholder="Tell people a bit about yourself..." rows={3} maxLength={500}
-          className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-orange-500"
-        />
-        <label className="text-sm font-medium text-gray-600">Interest Tags (comma-separated)</label>
-        <input
-          value={tags} onChange={(e) => setTags(e.target.value)}
-          placeholder="e.g. hiking, brunch, live-music"
-          className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-orange-500"
-        />
-        <button type="submit" className="bg-orange-500 text-white rounded-lg py-2 font-semibold hover:bg-orange-600">
-          Save Profile
-        </button>
-        {saved && <p className="text-green-600 text-sm text-center">Saved!</p>}
+        <div>
+          <label className={`${cls.label} block mb-1`}>Display Name</label>
+          <input value={displayName} onChange={(e) => setDisplayName(e.target.value)}
+            placeholder={user.name} className={cls.input} />
+        </div>
+        <div>
+          <label className={`${cls.label} block mb-1`}>Bio</label>
+          <textarea value={bio} onChange={(e) => setBio(e.target.value)}
+            placeholder="Tell people a bit about yourself..." rows={3} maxLength={500}
+            className={cls.textarea} />
+        </div>
+        <div>
+          <label className={`${cls.label} block mb-1`}>Interest Tags (comma-separated)</label>
+          <input value={tags} onChange={(e) => setTags(e.target.value)}
+            placeholder="e.g. hiking, brunch, live-music" className={cls.input} />
+        </div>
+        <button type="submit" className={`${cls.btnPrimary} w-full`}>Save Profile</button>
+        {saved && <p className="text-green-600 dark:text-green-400 text-sm text-center">Saved!</p>}
       </form>
     </div>
   );

@@ -30,6 +30,20 @@ async function request<T>(
   return res.json();
 }
 
+// ── Config status ─────────────────────────────────────────────────────
+
+export interface ConfigStatus {
+  gemini: boolean;
+  yelp: boolean;
+  eventbrite: boolean;
+  ticketmaster: boolean;
+  google_places: boolean;
+  google_calendar: boolean;
+}
+
+export const configStatus = () =>
+  request<ConfigStatus>("/config/status");
+
 // ── Auth ──────────────────────────────────────────────────────────────
 
 export interface User {
