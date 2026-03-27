@@ -34,6 +34,8 @@ async function request<T>(
 
 export interface ConfigStatus {
   gemini: boolean;
+  anthropic: boolean;
+  ai_ready: boolean;
   yelp: boolean;
   eventbrite: boolean;
   ticketmaster: boolean;

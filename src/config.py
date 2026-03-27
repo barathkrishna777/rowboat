@@ -38,8 +38,8 @@ class Settings(BaseSettings):
     default_timezone: str = "America/New_York"
 
     # LLM Settings
-    primary_model: str = "google-gla:gemini-2.5-flash"
-    fallback_model: str = "groq:llama-3.3-70b-versatile"
+    primary_model: str = "anthropic:claude-haiku-3-5"
+    fallback_model: str = "google-gla:gemini-2.5-flash"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
@@ -69,15 +69,21 @@ class Settings(BaseSettings):
             )
 
     def sync_api_keys(self):
-        """Ensure GOOGLE_API_KEY is set for PydanticAI from either env var.
+        """Ensure provider env vars are set for PydanticAI from settings.
 
-        Prefers GEMINI_API_KEY — on Railway GOOGLE_API_KEY may be stale.
+        PydanticAI reads GOOGLE_API_KEY and ANTHROPIC_API_KEY directly from
+        the environment — this method pushes the loaded settings values back
+        into os.environ so the provider SDKs always see the correct keys.
         """
+        # Google / Gemini
         key = self.gemini_api_key or self.google_api_key
         if key:
             os.environ["GOOGLE_API_KEY"] = key
-            # Also update the setting so all code paths use the correct key
             self.google_api_key = key
+
+        # Anthropic / Claude
+        if self.anthropic_api_key:
+            os.environ["ANTHROPIC_API_KEY"] = self.anthropic_api_key
 
 
 settings = Settings()

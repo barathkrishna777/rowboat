@@ -358,16 +358,20 @@ function PlanPageInner() {
       </div>
 
       {/* API key config warning */}
-      {configSt && !configSt.gemini && (
+      {configSt && !configSt.ai_ready && (
         <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-4 text-sm dark:bg-amber-950 dark:border-amber-700">
-          <p className="font-semibold text-amber-800 dark:text-amber-300">⚠️ AI features need a Gemini API key</p>
+          <p className="font-semibold text-amber-800 dark:text-amber-300">⚠️ AI features need an API key</p>
           <p className="text-amber-700 dark:text-amber-400 mt-1">
-            Add <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">GEMINI_API_KEY=your_key</code> to{" "}
-            <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">.env</code> then restart the API server.
-            Get a free key at{" "}
-            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
-              className="underline text-amber-800 dark:text-amber-300">aistudio.google.com/apikey</a>.
+            Add at least one LLM key to{" "}
+            <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">.env</code> then restart the API server:
           </p>
+          <ul className="list-disc list-inside text-amber-700 dark:text-amber-400 mt-1 space-y-0.5">
+            <li><code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">ANTHROPIC_API_KEY=sk-ant-…</code> — Claude (primary, recommended)</li>
+            <li><code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">GEMINI_API_KEY=AIza…</code> — Gemini free tier at{" "}
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
+                className="underline text-amber-800 dark:text-amber-300">aistudio.google.com/apikey</a>
+            </li>
+          </ul>
           {!configSt.yelp && !configSt.eventbrite && !configSt.ticketmaster && (
             <p className="text-amber-600 dark:text-amber-500 mt-1 text-xs">
               Venue search APIs (Yelp, Eventbrite, Ticketmaster) are also unconfigured — search will return no results.
@@ -565,8 +569,8 @@ function PlanPageInner() {
               {searchResult.venues.length === 0 ? (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950 dark:border-amber-700 p-4 text-sm text-amber-700 dark:text-amber-300 space-y-1">
                   <p className="font-semibold">No venues returned by any source.</p>
-                  {configSt && !configSt.gemini && (
-                    <p>The AI search agent requires a <strong>GEMINI_API_KEY</strong> — see the warning above.</p>
+                  {configSt && !configSt.ai_ready && (
+                    <p>The AI search agent requires an LLM API key (Claude or Gemini) — see the warning above.</p>
                   )}
                   {configSt && !configSt.yelp && !configSt.google_places && (
                     <p>No venue API keys are configured. Add Yelp or Google Places keys to <code>.env</code>.</p>

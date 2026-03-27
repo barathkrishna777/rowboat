@@ -84,12 +84,15 @@ def _key_set(value: str) -> bool:
 async def config_status():
     """Return which optional integrations are configured (no secrets exposed)."""
     gemini = _key_set(settings.gemini_api_key) or _key_set(settings.google_api_key)
+    anthropic = _key_set(settings.anthropic_api_key)
     return {
         "gemini": gemini,
+        "anthropic": anthropic,
+        "ai_ready": anthropic or gemini,  # True if ANY LLM provider is configured
         "yelp": _key_set(settings.yelp_api_key),
         "eventbrite": _key_set(settings.eventbrite_api_key),
         "ticketmaster": _key_set(settings.ticketmaster_api_key),
-        "google_places": gemini,  # Gemini is also used as Places fallback
+        "google_places": gemini,  # Places API uses Google key; LLM fallback prefers Claude
         "google_calendar": _key_set(settings.google_client_id) and _key_set(settings.google_client_secret),
     }
 
