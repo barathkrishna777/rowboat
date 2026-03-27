@@ -66,6 +66,7 @@ async def _warmup_gemini():
 async def startup():
     """Initialize DB and warm up Gemini on startup."""
     from src.db.database import init_db
+    settings.validate_production()
     await init_db()
     asyncio.create_task(_warmup_gemini())
 

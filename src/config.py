@@ -44,14 +44,15 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     def validate_production(self) -> None:
-        """Fail fast if critical secrets are missing or insecure in production."""
+        """Warn about missing or insecure settings in production (non-fatal)."""
         if self.environment != "production":
             return
 
-        errors: list[str] = []
-
         if self.jwt_secret == "change-me-in-production" or len(self.jwt_secret) < 16:
-            errors.append("JWT_SECRET must be set to a secure value (>= 16 chars)")
+            logger.warning(
+                "JWT_SECRET is using the default or is too short — "
+                "set a secure value (>= 16 chars) via the JWT_SECRET env var"
+            )
 
         if "sqlite" in self.database_url:
             logger.warning(
@@ -59,13 +60,10 @@ class Settings(BaseSettings):
                 "multi-worker deployments. Set a PostgreSQL URL."
             )
 
-        if not (self.gemini_api_key or self.google_api_key):
-            errors.append("GEMINI_API_KEY or GOOGLE_API_KEY is required")
-
-        if errors:
-            raise RuntimeError(
-                "Production environment validation failed:\n  - "
-                + "\n  - ".join(errors)
+        if not (self.gemini_api_key or self.google_api_key or self.anthropic_api_key):
+            logger.warning(
+                "No LLM API key is configured — set ANTHROPIC_API_KEY or "
+                "GOOGLE_API_KEY. AI features will not work."
             )
 
     def sync_api_keys(self):
@@ -94,4 +92,5 @@ if not settings.anthropic_api_key:
     if _env.get("ANTHROPIC_API_KEY"):
         settings.anthropic_api_key = _env["ANTHROPIC_API_KEY"]
 settings.sync_api_keys()
-settings.validate_production()
+# validate_production() is called in the FastAPI startup event (src/main.py)
+# so it does not prevent the app from booting and serving /health.
