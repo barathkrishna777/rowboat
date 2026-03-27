@@ -4,16 +4,26 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.auth import get_current_user
 from src.db.database import get_session
 from src.db.tables import FriendshipTable, UserTable
 from src.models.user import Friendship, FriendshipStatus, User, UserPreferences
 
 router = APIRouter()
+
+
+def _assert_owner(current_user: User, user_id: str) -> None:
+    """Raise 403 if the authenticated user doesn't match the path user_id."""
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to act on behalf of another user",
+        )
 
 
 def _row_to_user(row: UserTable) -> User:
@@ -79,8 +89,10 @@ async def search_users(q: str = "", session: AsyncSession = Depends(get_session)
 async def send_friend_request(
     user_id: str,
     body: SendFriendRequestBody,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    _assert_owner(current_user, user_id)
     """Send a friend request to another user by email."""
     sender = await session.get(UserTable, user_id)
     if not sender:
@@ -139,8 +151,10 @@ async def respond_to_request(
     user_id: str,
     friendship_id: int,
     body: RespondFriendRequestBody,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    _assert_owner(current_user, user_id)
     """Accept or decline a friend request."""
     row = await session.get(FriendshipTable, friendship_id)
     if not row:
@@ -169,7 +183,8 @@ async def respond_to_request(
 
 
 @router.get("/{user_id}/friends", response_model=list[User])
-async def get_friends(user_id: str, session: AsyncSession = Depends(get_session)):
+async def get_friends(user_id: str, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    _assert_owner(current_user, user_id)
     """Get all accepted friends for a user."""
     result = await session.execute(
         select(FriendshipTable).where(
@@ -187,7 +202,8 @@ async def get_friends(user_id: str, session: AsyncSession = Depends(get_session)
 
 
 @router.get("/{user_id}/requests/incoming", response_model=list[Friendship])
-async def get_incoming_requests(user_id: str, session: AsyncSession = Depends(get_session)):
+async def get_incoming_requests(user_id: str, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    _assert_owner(current_user, user_id)
     """Get pending friend requests received by user."""
     result = await session.execute(
         select(FriendshipTable).where(
@@ -208,7 +224,8 @@ async def get_incoming_requests(user_id: str, session: AsyncSession = Depends(ge
 
 
 @router.get("/{user_id}/requests/outgoing", response_model=list[Friendship])
-async def get_outgoing_requests(user_id: str, session: AsyncSession = Depends(get_session)):
+async def get_outgoing_requests(user_id: str, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    _assert_owner(current_user, user_id)
     """Get pending friend requests sent by user."""
     result = await session.execute(
         select(FriendshipTable).where(
@@ -232,7 +249,8 @@ async def get_outgoing_requests(user_id: str, session: AsyncSession = Depends(ge
 
 
 @router.delete("/{user_id}/friends/{friend_id}")
-async def remove_friend(user_id: str, friend_id: str, session: AsyncSession = Depends(get_session)):
+async def remove_friend(user_id: str, friend_id: str, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    _assert_owner(current_user, user_id)
     """Remove an existing friendship."""
     result = await session.execute(
         select(FriendshipTable).where(

@@ -1,6 +1,9 @@
+import logging
 import os
 
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -28,6 +31,7 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60 * 24 * 7  # 1 week
 
     # App Settings
+    environment: str = "development"  # "development" | "production"
     database_url: str = "sqlite+aiosqlite:///./data/rowboat.db"
     chroma_persist_dir: str = "./data/chroma_db"
     default_location: str = "Pittsburgh, PA"
@@ -38,6 +42,31 @@ class Settings(BaseSettings):
     fallback_model: str = "groq:llama-3.3-70b-versatile"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+    def validate_production(self) -> None:
+        """Fail fast if critical secrets are missing or insecure in production."""
+        if self.environment != "production":
+            return
+
+        errors: list[str] = []
+
+        if self.jwt_secret == "change-me-in-production" or len(self.jwt_secret) < 16:
+            errors.append("JWT_SECRET must be set to a secure value (>= 16 chars)")
+
+        if "sqlite" in self.database_url:
+            logger.warning(
+                "DATABASE_URL is SQLite in production — this is unsafe for "
+                "multi-worker deployments. Set a PostgreSQL URL."
+            )
+
+        if not (self.gemini_api_key or self.google_api_key):
+            errors.append("GEMINI_API_KEY or GOOGLE_API_KEY is required")
+
+        if errors:
+            raise RuntimeError(
+                "Production environment validation failed:\n  - "
+                + "\n  - ".join(errors)
+            )
 
     def sync_api_keys(self):
         """Ensure GOOGLE_API_KEY is set for PydanticAI from either env var.
@@ -59,3 +88,4 @@ if not settings.anthropic_api_key:
     if _env.get("ANTHROPIC_API_KEY"):
         settings.anthropic_api_key = _env["ANTHROPIC_API_KEY"]
 settings.sync_api_keys()
+settings.validate_production()

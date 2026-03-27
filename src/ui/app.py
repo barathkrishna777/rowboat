@@ -383,6 +383,14 @@ def _avatar_color(name: str) -> str:
     return _AVATAR_COLORS[sum(ord(c) for c in name) % len(_AVATAR_COLORS)]
 
 
+def _auth_headers() -> dict[str, str]:
+    """Return Authorization header dict if the user has a JWT, else empty."""
+    token = st.session_state.get("auth_token")
+    if token:
+        return {"Authorization": f"Bearer {token}"}
+    return {}
+
+
 def _register_current_user():
     """Register the current user with the friends API so they can be found by email."""
     uid = st.session_state.get("user_id")
@@ -403,7 +411,7 @@ def _refresh_friends():
     if not uid:
         return
     try:
-        resp = httpx.get(f"{API_BASE}/friends/{uid}/friends", timeout=5.0)
+        resp = httpx.get(f"{API_BASE}/friends/{uid}/friends", headers=_auth_headers(), timeout=5.0)
         resp.raise_for_status()
         st.session_state.friends_list = resp.json()
     except Exception:
@@ -419,7 +427,7 @@ if st.session_state.get("user_id"):
     # Check for incoming requests
     incoming_requests = []
     try:
-        resp = httpx.get(f"{API_BASE}/friends/{st.session_state.user_id}/requests/incoming", timeout=5.0)
+        resp = httpx.get(f"{API_BASE}/friends/{st.session_state.user_id}/requests/incoming", headers=_auth_headers(), timeout=5.0)
         if resp.status_code == 200:
             incoming_requests = resp.json()
     except Exception:
@@ -477,7 +485,7 @@ if st.session_state.get("user_id"):
                             try:
                                 httpx.delete(
                                     f"{API_BASE}/friends/{st.session_state.user_id}/friends/{friend['id']}",
-                                    timeout=5.0,
+                                    headers=_auth_headers(), timeout=5.0,
                                 )
                                 _refresh_friends()
                                 st.rerun()
@@ -516,7 +524,7 @@ if st.session_state.get("user_id"):
                             try:
                                 httpx.post(
                                     f"{API_BASE}/friends/{st.session_state.user_id}/respond/{fid}",
-                                    json={"accept": True}, timeout=5.0,
+                                    json={"accept": True}, headers=_auth_headers(), timeout=5.0,
                                 )
                                 st.rerun()
                             except Exception as e:
@@ -526,7 +534,7 @@ if st.session_state.get("user_id"):
                             try:
                                 httpx.post(
                                     f"{API_BASE}/friends/{st.session_state.user_id}/respond/{fid}",
-                                    json={"accept": False}, timeout=5.0,
+                                    json={"accept": False}, headers=_auth_headers(), timeout=5.0,
                                 )
                                 st.rerun()
                             except Exception as e:
@@ -537,7 +545,7 @@ if st.session_state.get("user_id"):
             # Show outgoing
             outgoing_requests = []
             try:
-                resp = httpx.get(f"{API_BASE}/friends/{st.session_state.user_id}/requests/outgoing", timeout=5.0)
+                resp = httpx.get(f"{API_BASE}/friends/{st.session_state.user_id}/requests/outgoing", headers=_auth_headers(), timeout=5.0)
                 if resp.status_code == 200:
                     outgoing_requests = resp.json()
             except Exception:
@@ -574,7 +582,7 @@ if st.session_state.get("user_id"):
                             payload["to_email"] = friend_email
                         resp = httpx.post(
                             f"{API_BASE}/friends/{st.session_state.user_id}/request",
-                            json=payload, timeout=5.0,
+                            json=payload, headers=_auth_headers(), timeout=5.0,
                         )
                         resp.raise_for_status()
                         target_display = f"@{friend_username}" if friend_username else friend_email
