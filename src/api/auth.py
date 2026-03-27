@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import settings
 from src.db.database import get_session
 from src.db.tables import UserTable
-from src.models.user import User, UserPreferences
+from src.models.user import User, UserAvailability, UserPreferences, UserProfile
 from src.tools.google_calendar import (
     SCOPES,
     exchange_code_for_token,
@@ -58,10 +58,13 @@ def _create_token(user_id: str) -> str:
 def _row_to_user(row: UserTable) -> User:
     prefs = UserPreferences(**json.loads(row.preferences)) if row.preferences else None
     token = json.loads(row.google_calendar_token) if row.google_calendar_token else None
+    profile = UserProfile(**json.loads(row.profile)) if row.profile else None
+    avail = UserAvailability(**json.loads(row.availability)) if row.availability else None
     return User(
         id=row.id, name=row.name, email=row.email,
         username=row.username, auth_provider=row.auth_provider,
         preferences=prefs, google_calendar_token=token,
+        profile=profile, availability=avail,
     )
 
 

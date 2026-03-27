@@ -47,6 +47,31 @@ class UserPreferences(BaseModel):
     accessibility_needs: list[str] = Field(default_factory=list)
 
 
+class AvailabilityWindow(BaseModel):
+    """A recurring weekly availability slot."""
+    day: str = Field(description="Day of week, e.g. 'monday', 'saturday'")
+    start: str = Field(description="Start time in HH:MM (24h), e.g. '18:00'")
+    end: str = Field(description="End time in HH:MM (24h), e.g. '22:00'")
+
+
+class UserAvailability(BaseModel):
+    """Structured availability for matching — editable without calendar OAuth."""
+    timezone: str = "America/New_York"
+    weekly_windows: list[AvailabilityWindow] = Field(default_factory=list)
+    notes: str = Field(default="", description="e.g. 'usually free weekends'")
+
+
+class UserProfile(BaseModel):
+    """Public/social profile surface for discovery and matching."""
+    display_name: str | None = None
+    bio: str | None = Field(default=None, max_length=500)
+    avatar_url: str | None = None
+    interest_tags: list[str] = Field(
+        default_factory=list,
+        description="Free-form interest tags for matching, e.g. ['live-music', 'hiking', 'brunch']",
+    )
+
+
 class User(BaseModel):
     id: str
     name: str
@@ -55,6 +80,8 @@ class User(BaseModel):
     auth_provider: str | None = None
     google_calendar_token: dict | None = None
     preferences: UserPreferences | None = None
+    profile: UserProfile | None = None
+    availability: UserAvailability | None = None
 
 
 class FriendshipStatus(str, Enum):

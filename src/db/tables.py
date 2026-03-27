@@ -25,6 +25,8 @@ class UserTable(Base):
     google_id = Column(String, nullable=True, unique=True, index=True)
     google_calendar_token = Column(Text, nullable=True)  # JSON string
     preferences = Column(Text, nullable=True)  # JSON string
+    profile = Column(Text, nullable=True)  # JSON string (UserProfile)
+    availability = Column(Text, nullable=True)  # JSON string (UserAvailability)
     created_at = Column(DateTime, default=datetime.now)
 
 

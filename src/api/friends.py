@@ -12,7 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.auth import get_current_user
 from src.db.database import get_session
 from src.db.tables import FriendshipTable, UserTable
-from src.models.user import Friendship, FriendshipStatus, User, UserPreferences
+from src.models.user import (
+    Friendship, FriendshipStatus, User, UserAvailability, UserPreferences, UserProfile,
+)
 
 router = APIRouter()
 
@@ -29,10 +31,13 @@ def _assert_owner(current_user: User, user_id: str) -> None:
 def _row_to_user(row: UserTable) -> User:
     prefs = UserPreferences(**json.loads(row.preferences)) if row.preferences else None
     token = json.loads(row.google_calendar_token) if row.google_calendar_token else None
+    profile = UserProfile(**json.loads(row.profile)) if row.profile else None
+    avail = UserAvailability(**json.loads(row.availability)) if row.availability else None
     return User(
         id=row.id, name=row.name, email=row.email,
         username=row.username, auth_provider=row.auth_provider,
         preferences=prefs, google_calendar_token=token,
+        profile=profile, availability=avail,
     )
 
 
