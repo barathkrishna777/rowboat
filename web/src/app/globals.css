@@ -1,7 +1,6 @@
-@import "tailwindcss";
-
-/* Dark mode via .dark class on <html> */
-@variant dark (&:where(.dark, .dark *));
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   --bg: #f9fafb;
