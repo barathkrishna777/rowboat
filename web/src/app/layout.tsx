@@ -15,9 +15,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <nav className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
             <a href="/" className="text-xl font-bold text-orange-500">Rowboat</a>
             <div className="flex gap-4 text-sm">
-              <a href="/profile" className="hover:text-orange-500">Profile</a>
-              <a href="/friends" className="hover:text-orange-500">Friends</a>
+              <a href="/plan" className="hover:text-orange-500 font-semibold">Plan Outing</a>
               <a href="/swipe" className="hover:text-orange-500">Discover</a>
+              <a href="/friends" className="hover:text-orange-500">Friends</a>
+              <a href="/profile" className="hover:text-orange-500">Profile</a>
             </div>
           </nav>
           <main className="max-w-2xl mx-auto px-4 py-8">{children}</main>

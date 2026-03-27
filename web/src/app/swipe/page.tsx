@@ -47,8 +47,9 @@ export default function SwipePage() {
     try {
       const result = await hangoutsApi.createGroupFromMatch(matchId);
       if (result.group_id) {
-        alert(`Group created! ID: ${result.group_id}\nOpen the planner to plan this outing.`);
-        setMatches((prev) => prev.filter((m) => m.id !== matchId));
+        // Update the local match so the link becomes a real href
+        setMatches((prev) => prev.map(m => m.id === matchId ? result : m));
+        router.push(`/plan?group_id=${result.group_id}`);
       }
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to create group");
@@ -82,13 +83,16 @@ export default function SwipePage() {
           {matches.map((m) => (
             <div key={m.id} className="bg-green-50 border border-green-300 rounded-lg p-4 mb-2">
               <p className="font-semibold text-green-800">Match found! ({m.member_user_ids.length} people, score: {m.score})</p>
-              <button
-                onClick={() => handleCreateGroup(m.id)}
-                disabled={creating}
-                className="mt-2 bg-green-600 text-white rounded-lg px-4 py-2 font-semibold hover:bg-green-700 disabled:opacity-50"
+              <a
+                href={m.group_id ? `/plan?group_id=${m.group_id}` : "#"}
+                onClick={!m.group_id ? async (e) => {
+                  e.preventDefault();
+                  await handleCreateGroup(m.id);
+                } : undefined}
+                className="mt-2 inline-block bg-green-600 text-white rounded-lg px-4 py-2 font-semibold hover:bg-green-700 disabled:opacity-50"
               >
-                Plan this outing
-              </button>
+                {creating ? "Creating group…" : "🗓 Plan this outing"}
+              </a>
             </div>
           ))}
         </div>

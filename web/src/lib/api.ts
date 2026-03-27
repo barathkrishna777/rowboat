@@ -101,6 +101,174 @@ export const friends = {
     request<unknown>(`/friends/${userId}/friends/${friendId}`, { method: "DELETE" }),
 };
 
+// ── Groups ────────────────────────────────────────────────────────────
+
+export interface Group {
+  id: string;
+  name: string;
+  member_ids: string[];
+  created_by: string;
+}
+
+export const groups = {
+  create: (name: string, creator_name: string, creator_email: string) =>
+    request<Group>("/groups/", {
+      method: "POST",
+      body: JSON.stringify({ name, creator_name, creator_email }),
+    }),
+  get: (groupId: string) => request<Group>(`/groups/${groupId}`),
+  addMember: (groupId: string, name: string, email: string) =>
+    request<Group>(`/groups/${groupId}/members`, {
+      method: "POST",
+      body: JSON.stringify({ name, email }),
+    }),
+  getMembers: (groupId: string) => request<User[]>(`/groups/${groupId}/members`),
+};
+
+// ── Preferences ───────────────────────────────────────────────────────
+
+export interface UserPreferences {
+  cuisine_preferences: string[];
+  activity_preferences: string[];
+  dietary_restrictions: string[];
+  budget_max: "$" | "$$" | "$$$" | "$$$$";
+  dealbreakers: string[];
+  preferred_neighborhoods: string[];
+  group_size_comfort: [number, number];
+  accessibility_needs: string[];
+}
+
+export const preferences = {
+  get: (userId: string) => request<UserPreferences>(`/preferences/${userId}`),
+  save: (userId: string, prefs: Partial<UserPreferences>) =>
+    request<UserPreferences>(`/preferences/${userId}`, {
+      method: "POST",
+      body: JSON.stringify(prefs),
+    }),
+};
+
+// ── Venue types ────────────────────────────────────────────────────────
+
+export interface Venue {
+  id: string;
+  name: string;
+  category: string;
+  address: string;
+  categories: string[];
+  rating?: number;
+  review_count?: number;
+  price_tier?: string;
+  url?: string;
+  image_url?: string;
+  source?: string;
+}
+
+export interface ScoredVenue extends Venue {
+  score: number;
+  passed_hard_constraints: boolean;
+  explanation?: string;
+  violation_reasons?: string[];
+}
+
+export interface SearchResult {
+  venues: Venue[];
+  summary: string;
+  sources_searched: string[];
+}
+
+export interface RecommendationResult {
+  ranked_venues: ScoredVenue[];
+  rejected_venues: ScoredVenue[];
+  summary: string;
+  constraint_summary: string;
+}
+
+export interface OrchestratorPlan {
+  group_name: string;
+  members: string[];
+  request_summary: string;
+  venues_found: number;
+  ranked_venues: ScoredVenue[];
+  rejected_venues: ScoredVenue[];
+  available_slots: Record<string, unknown>[];
+  recommended_venue: Record<string, unknown> | null;
+  recommended_slot: Record<string, unknown> | null;
+  estimated_cost_per_person: string;
+  itinerary_summary: string;
+  rag_insights: string;
+  steps_completed: string[];
+  agent_log: string[];
+}
+
+// ── Plans (AI agents) ─────────────────────────────────────────────────
+
+export const plans = {
+  search: (query: string, location = "Pittsburgh, PA", max_results = 10) =>
+    request<SearchResult>("/plans/search", {
+      method: "POST",
+      body: JSON.stringify({ query, location, max_results }),
+    }),
+
+  recommend: (
+    venues: Venue[],
+    preferences_list: Partial<UserPreferences>[],
+    groupId: string,
+    budgetMax = "$$",
+    dietaryRestrictions: string[] = [],
+    dealbreakers: string[] = [],
+    memberNames: string[] = [],
+  ) =>
+    request<RecommendationResult>("/plans/recommend", {
+      method: "POST",
+      body: JSON.stringify({
+        venues,
+        preferences: preferences_list,
+        group_id: groupId,
+        budget_max: budgetMax,
+        dietary_restrictions: dietaryRestrictions,
+        dealbreakers,
+        member_names: memberNames,
+      }),
+    }),
+
+  orchestrate: (payload: {
+    request: string;
+    group_name?: string;
+    members?: { name: string; email: string }[];
+    preferences?: Partial<UserPreferences>[];
+    location?: string;
+    date_range_start?: string;
+    date_range_end?: string;
+    earliest_time?: string;
+    latest_time?: string;
+  }) =>
+    request<OrchestratorPlan>("/plans/orchestrate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+};
+
+// ── Calendar ──────────────────────────────────────────────────────────
+
+export const calendar = {
+  status: (userId: string) =>
+    request<{ connected: boolean }>(`/calendar/status/${userId}`),
+  authUrl: () => request<{ auth_url: string }>("/calendar/auth-url"),
+  book: (payload: {
+    organizer_user_id: string;
+    group_id: string;
+    venue_name: string;
+    venue_address: string;
+    start_time: string;
+    end_time: string;
+    attendee_emails: string[];
+  }) =>
+    request<{ message: string; calendar_link?: string }>("/calendar/book", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+};
+
 // ── Hangouts ──────────────────────────────────────────────────────────
 
 export interface Hangout {
