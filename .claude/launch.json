@@ -2,6 +2,19 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "api",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "uvicorn", "src.main:app", "--port", "8000"],
+      "port": 8000
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "3000"],
+      "cwd": "web",
+      "port": 3000
+    },
+    {
       "name": "streamlit",
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "streamlit", "run", "src/ui/app.py", "--server.port", "8502"],

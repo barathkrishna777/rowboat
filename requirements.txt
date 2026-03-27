@@ -13,6 +13,7 @@ beautifulsoup4>=4.12
 python-dotenv>=1.0
 chromadb>=0.4
 passlib[bcrypt]>=1.7
+bcrypt==4.0.1  # passlib incompatible with bcrypt>=4.1 (missing __about__)
 python-jose[cryptography]>=3.3
 # Production DB + migrations (optional for local SQLite dev)
 alembic>=1.13

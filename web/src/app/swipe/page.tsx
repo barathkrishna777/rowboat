@@ -136,7 +136,7 @@ export default function SwipePage() {
       )}
 
       <p className="text-xs text-gray-400 text-center mt-6">
-        {feed.length > 0 ? `${index + 1} / ${feed.length}` : ""}
+        {feed.length > 0 && index < feed.length ? `${index + 1} / ${feed.length}` : ""}
       </p>
     </div>
   );
