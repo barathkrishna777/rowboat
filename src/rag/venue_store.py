@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-import chromadb
-from chromadb.config import Settings as ChromaSettings
+if TYPE_CHECKING:
+    import chromadb
 
 from src.config import settings
 from src.models.event import Venue
@@ -27,6 +27,9 @@ _feedback_collection: chromadb.Collection | None = None
 
 def _get_client() -> chromadb.ClientAPI:
     """Lazy-initialize the ChromaDB client."""
+    import chromadb
+    from chromadb.config import Settings as ChromaSettings
+
     global _client
     if _client is None:
         persist_dir = settings.chroma_persist_dir

@@ -10,19 +10,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent, RunContext
 
 from src.config import settings
 from src.models.event import ScoredVenue, Venue
 from src.models.user import UserPreferences
 from src.models.constraints import ConstraintSet
 from src.constraints.solver import rank_venues, DEFAULT_WEIGHTS
-from src.rag.venue_store import (
-    index_venues,
-    search_similar_venues,
-    get_past_preferences,
-    get_venue_history_summary,
-)
 
 
 class RecommendationResult(BaseModel):
@@ -45,8 +38,10 @@ class RecommendationDeps:
 _recommendation_agent: Agent | None = None
 
 
-def get_recommendation_agent() -> Agent:
+def get_recommendation_agent():
     """Lazy-initialize the recommendation agent."""
+    from pydantic_ai import Agent
+
     global _recommendation_agent
     if _recommendation_agent is None:
         _recommendation_agent = Agent(
@@ -67,8 +62,9 @@ def get_recommendation_agent() -> Agent:
     return _recommendation_agent
 
 
-def _register_recommendation_tools(agent: Agent):
+def _register_recommendation_tools(agent):
     """Register tools on the recommendation agent."""
+    from pydantic_ai import RunContext
 
     @agent.tool
     async def tool_score_and_rank_venues(
@@ -96,6 +92,7 @@ def _register_recommendation_tools(agent: Agent):
         Args:
             query: What to search for (e.g., "arcade bar in Pittsburgh", "Italian restaurant").
         """
+        from src.rag.venue_store import search_similar_venues
         return search_similar_venues(query, n_results=5)
 
     @agent.tool
@@ -108,6 +105,7 @@ def _register_recommendation_tools(agent: Agent):
         Args:
             query: What to look for (e.g., "bowling", "expensive restaurants", "loud venues").
         """
+        from src.rag.venue_store import get_past_preferences
         return get_past_preferences(query, n_results=5)
 
     @agent.tool
@@ -115,6 +113,7 @@ def _register_recommendation_tools(agent: Agent):
         ctx: RunContext[RecommendationDeps],
     ) -> dict:
         """Get stats about the venue knowledge base and feedback history."""
+        from src.rag.venue_store import get_venue_history_summary
         return get_venue_history_summary()
 
 
@@ -132,6 +131,7 @@ async def run_recommendation(
     """
     # Always index venues into the knowledge base for future searches
     try:
+        from src.rag.venue_store import index_venues
         indexed = index_venues(venues)
     except Exception:
         indexed = 0  # don't block on RAG failures
