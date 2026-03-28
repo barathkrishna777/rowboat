@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+import os
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.config import settings
 
-engine = create_async_engine(settings.database_url, echo=False)
+# Ensure the data directory exists when using SQLite so the engine can
+# create the database file without raising FileNotFoundError.
+_url = settings.async_database_url
+if "sqlite" in _url:
+    _db_path = _url.split("///")[-1] if "///" in _url else ""
+    if _db_path:
+        os.makedirs(os.path.dirname(_db_path) or ".", exist_ok=True)
+
+engine = create_async_engine(_url, echo=False)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 

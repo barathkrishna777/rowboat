@@ -37,6 +37,22 @@ class Settings(BaseSettings):
     default_location: str = "Pittsburgh, PA"
     default_timezone: str = "America/New_York"
 
+    @property
+    def async_database_url(self) -> str:
+        """Return a database URL compatible with SQLAlchemy's async engine.
+
+        Railway (and most PaaS providers) set DATABASE_URL to
+        ``postgresql://…`` but async SQLAlchemy requires the
+        ``postgresql+asyncpg://…`` scheme.  This property handles the
+        conversion automatically so the rest of the app Just Works™.
+        """
+        url = self.database_url
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        return url
+
     # LLM Settings
     primary_model: str = "anthropic:claude-haiku-3-5"
     fallback_model: str = "google-gla:gemini-2.5-flash"
