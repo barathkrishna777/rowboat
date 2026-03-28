@@ -56,11 +56,43 @@ async def get_session() -> AsyncSession:
 
 
 async def init_db():
-    """Create all tables."""
-    from src.db.tables import Base
+    """Create all tables and seed default hangouts if the table is empty."""
+    from src.db.tables import Base, HangoutTable
+    from sqlalchemy import select, func
+    import json
+    import uuid
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Seed default hangouts so new users see cards immediately
+    async with async_session() as session:
+        count = (await session.execute(select(func.count()).select_from(HangoutTable))).scalar_one()
+        if count == 0:
+            logger.info("[DB] Seeding default hangouts...")
+            defaults = [
+                ("Saturday Bowling Night", "Hit the lanes together — shoes included!", ["bowling", "casual", "evening"], "Pittsburgh, PA"),
+                ("Escape Room Challenge", "60 minutes to break out — who's got the brains?", ["escape room", "puzzle", "teamwork"], "Pittsburgh, PA"),
+                ("Trivia Night at a Bar", "Test your general knowledge over drinks.", ["trivia", "bar", "drinks"], "Pittsburgh, PA"),
+                ("Hiking at North Park", "Easy 3-mile trail, great views, great company.", ["hiking", "outdoors", "nature"], "Pittsburgh, PA"),
+                ("Board Game Café", "Pick from 500+ games and snacks. No experience needed.", ["board games", "café", "chill"], "Pittsburgh, PA"),
+                ("Comedy Show Downtown", "Catch a live stand-up set and laugh the night away.", ["comedy", "live show", "nightlife"], "Pittsburgh, PA"),
+                ("Sunday Brunch Run", "Casual run followed by a big brunch together.", ["running", "brunch", "active"], "Pittsburgh, PA"),
+                ("Karaoke Night", "Belt your favorite songs — no talent required.", ["karaoke", "singing", "nightlife"], "Pittsburgh, PA"),
+                ("Mini Golf Outing", "Classic outdoor mini golf, perfect for all skill levels.", ["mini golf", "outdoor", "fun"], "Pittsburgh, PA"),
+                ("Museum Visit", "Explore the Carnegie Museum of Art or Natural History.", ["museum", "culture", "daytime"], "Pittsburgh, PA"),
+            ]
+            for title, desc, tags, location in defaults:
+                session.add(HangoutTable(
+                    id=str(uuid.uuid4()),
+                    title=title,
+                    description=desc,
+                    tags=json.dumps(tags),
+                    location_area=location,
+                    source="template",
+                ))
+            await session.commit()
+            logger.info(f"[DB] Seeded {len(defaults)} default hangouts.")
 
 
 async def close_db():

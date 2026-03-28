@@ -23,13 +23,13 @@ export default function Home() {
         <a href="/plan" className="bg-orange-500 text-white rounded-lg py-3 px-6 font-semibold hover:bg-orange-600 text-center">
           🗓 Plan an Outing
         </a>
-        <a href="/swipe" className="bg-white border border-gray-300 rounded-lg py-3 px-6 font-semibold hover:border-orange-400 text-center">
+        <a href="/swipe" className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-100 rounded-lg py-3 px-6 font-semibold hover:border-orange-400 dark:hover:border-orange-400 text-center">
           ✨ Discover Hangouts
         </a>
-        <a href="/friends" className="bg-white border border-gray-300 rounded-lg py-3 px-6 font-semibold hover:border-orange-400 text-center">
+        <a href="/friends" className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-100 rounded-lg py-3 px-6 font-semibold hover:border-orange-400 dark:hover:border-orange-400 text-center">
           👥 Friends
         </a>
-        <a href="/profile" className="bg-white border border-gray-300 rounded-lg py-3 px-6 font-semibold hover:border-orange-400 text-center">
+        <a href="/profile" className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-100 rounded-lg py-3 px-6 font-semibold hover:border-orange-400 dark:hover:border-orange-400 text-center">
           ✏️ Edit Profile
         </a>
       </div>

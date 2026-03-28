@@ -133,9 +133,9 @@ export default function SwipePage() {
         </div>
       ) : (
         <div className="text-center text-gray-400 mt-12">
-          <p className="text-4xl mb-2">{"\\u2728"}</p>
+          <p className="text-4xl mb-2">✨</p>
           <p>No more hangouts to discover right now.</p>
-          <button onClick={loadFeed} className="mt-4 text-orange-500 font-medium">Refresh feed</button>
+          <button onClick={loadFeed} className="mt-4 text-orange-500 font-medium hover:text-orange-600">Refresh feed</button>
         </div>
       )}
 
