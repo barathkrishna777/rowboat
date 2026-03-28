@@ -2,6 +2,6 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "echo '--- Container starting ---' && python -c 'import src.main; print(\"--- Import OK ---\")' && uvicorn src.main:app --host 0.0.0.0 --port $PORT"
+startCommand = "export PATH=/opt/venv/bin:$PATH && echo '--- Container starting ---' && python -c 'import src.main; print(\"--- Import OK ---\")' && uvicorn src.main:app --host 0.0.0.0 --port $PORT"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 5
