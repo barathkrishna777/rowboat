@@ -32,21 +32,26 @@ class Settings(BaseSettings):
 
     # App Settings
     environment: str = "development"  # "development" | "production"
-    database_url: str = "sqlite+aiosqlite:///./data/rowboat.db"
+    database_url: str = ""  # resolved via async_database_url property
     chroma_persist_dir: str = "./data/chroma_db"
     default_location: str = "Pittsburgh, PA"
     default_timezone: str = "America/New_York"
+
+    _SQLITE_DEFAULT = "sqlite+aiosqlite:///./data/rowboat.db"
 
     @property
     def async_database_url(self) -> str:
         """Return a database URL compatible with SQLAlchemy's async engine.
 
-        Railway (and most PaaS providers) set DATABASE_URL to
-        ``postgresql://…`` but async SQLAlchemy requires the
-        ``postgresql+asyncpg://…`` scheme.  This property handles the
-        conversion automatically so the rest of the app Just Works™.
+        - If DATABASE_URL is unset or empty, uses the SQLite default.
+        - Railway (and most PaaS providers) set DATABASE_URL to
+          ``postgresql://…`` but async SQLAlchemy requires the
+          ``postgresql+asyncpg://…`` scheme. This property handles the
+          conversion automatically so the rest of the app Just Works™.
         """
-        url = self.database_url
+        url = self.database_url.strip()
+        if not url:
+            return self._SQLITE_DEFAULT
         if url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
         elif url.startswith("postgres://"):
@@ -70,7 +75,7 @@ class Settings(BaseSettings):
                 "set a secure value (>= 16 chars) via the JWT_SECRET env var"
             )
 
-        if "sqlite" in self.database_url:
+        if "sqlite" in self.async_database_url:
             logger.warning(
                 "DATABASE_URL is SQLite in production — this is unsafe for "
                 "multi-worker deployments. Set a PostgreSQL URL."
