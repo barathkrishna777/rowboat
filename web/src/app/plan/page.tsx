@@ -395,7 +395,7 @@ function PlanPageInner() {
             <div className="space-y-3">
               <input value={groupName} onChange={e => setGroupName(e.target.value)}
                 placeholder="Group name (e.g. Friday Night Crew)"
-                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-orange-500" />
+                className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-4 py-2.5 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-400" />
               <button onClick={handleCreateGroup} disabled={!groupName || groupLoading}
                 className="w-full bg-orange-500 text-white rounded-lg py-2.5 font-semibold hover:bg-orange-600 disabled:opacity-50">
                 {groupLoading ? "Creating…" : "Create Group"}
@@ -426,9 +426,9 @@ function PlanPageInner() {
               <div className="border rounded-lg p-3 space-y-2">
                 <p className="text-sm font-medium text-gray-600">Add a member</p>
                 <input value={newMemberName} onChange={e => setNewMemberName(e.target.value)}
-                  placeholder="Name" className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm" />
+                  placeholder="Name" className="w-full border border-gray-200 dark:border-slate-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500" />
                 <input value={newMemberEmail} onChange={e => setNewMemberEmail(e.target.value)}
-                  placeholder="Email" type="email" className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm" />
+                  placeholder="Email" type="email" className="w-full border border-gray-200 dark:border-slate-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500" />
                 <button onClick={handleAddMember} disabled={!newMemberName || !newMemberEmail || groupLoading}
                   className="w-full border border-orange-400 text-orange-500 rounded py-1.5 text-sm font-medium hover:bg-orange-50 disabled:opacity-50">
                   + Add Member
@@ -477,13 +477,13 @@ function PlanPageInner() {
               <p className="text-sm font-medium text-gray-600 mb-1">Dealbreakers (one per line)</p>
               <textarea value={dealbreakers} onChange={e => setDealbreakers(e.target.value)}
                 rows={2} placeholder={"No loud places\nMust have parking"}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-orange-500" />
+                className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-400" />
             </div>
             <div>
               <p className="text-sm font-medium text-gray-600 mb-1">Preferred neighborhoods</p>
               <input value={neighborhoods} onChange={e => setNeighborhoods(e.target.value)}
                 placeholder="Oakland, Shadyside, Squirrel Hill"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-orange-500" />
+                className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-400" />
             </div>
             <div className="flex gap-3">
               <button onClick={() => setStep(1)}
@@ -507,10 +507,10 @@ function PlanPageInner() {
           <div className="space-y-3 mb-4">
             <textarea value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               rows={3} placeholder="Describe your outing idea — e.g. 'Fun Saturday dinner and bowling, budget around $30 per person'"
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-orange-500" />
+              className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-4 py-2.5 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-400" />
             <input value={location} onChange={e => setLocation(e.target.value)}
               placeholder="Location"
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-orange-500" />
+              className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-4 py-2 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-400" />
           </div>
 
           {/* Two paths: manual search or orchestrate */}

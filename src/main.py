@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI
@@ -16,10 +17,29 @@ from src.config import settings
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage startup and shutdown logic using the modern lifespan pattern."""
+    # --- startup ---
+    from src.db.database import init_db
+    settings.validate_production()
+    try:
+        await init_db()
+    except Exception as e:
+        logger.error(f"[Startup] Database init failed: {e}", exc_info=True)
+    asyncio.create_task(_warmup_gemini())
+
+    yield  # app is running
+
+    # --- shutdown (add cleanup here if needed) ---
+
+
 app = FastAPI(
     title="Rowboat API",
     description="AI-powered group outing coordination platform",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -61,19 +81,6 @@ async def _warmup_gemini():
     except Exception as e:
         logger.warning(f"[Warmup] Gemini ping failed: {e}")
 
-
-@app.on_event("startup")
-async def startup():
-    """Initialize DB and warm up Gemini on startup."""
-    from src.db.database import init_db
-    settings.validate_production()
-    try:
-        await init_db()
-    except Exception as e:
-        # Log but don't crash — this keeps /health reachable so Railway
-        # doesn't kill the container before we can diagnose the issue.
-        logger.error(f"[Startup] Database init failed: {e}", exc_info=True)
-    asyncio.create_task(_warmup_gemini())
 
 
 @app.get("/")

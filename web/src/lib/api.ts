@@ -128,7 +128,7 @@ export interface Group {
 
 export const groups = {
   create: (name: string, creator_name: string, creator_email: string) =>
-    request<Group>("/groups/", {
+    request<Group>("/groups", {
       method: "POST",
       body: JSON.stringify({ name, creator_name, creator_email }),
     }),
