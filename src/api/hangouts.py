@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.auth import get_current_user
 from src.db.database import get_session
 from src.db.tables import (
+    PresetTable,
     GroupMemberTable,
     GroupTable,
     HangoutTable,
@@ -30,6 +31,8 @@ from src.models.hangout import (
     SwipeRequest,
 )
 from src.models.user import User, UserPreferences, UserProfile
+from src.models.preset import PresetCriteria
+from src.presets.catalog import get_built_in_preset
 
 router = APIRouter()
 
@@ -117,6 +120,7 @@ async def get_hangout(
 
 @router.get("/feed/me", response_model=list[Hangout])
 async def my_feed(
+    preset_id: str | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -129,7 +133,42 @@ async def my_feed(
         .where(HangoutTable.id.not_in(swiped))
         .order_by(HangoutTable.created_at.desc())
     )
-    return [_row_to_hangout(r) for r in result.scalars().all()]
+    cards = [_row_to_hangout(r) for r in result.scalars().all()]
+
+    if not preset_id:
+        return cards
+
+    criteria: PresetCriteria | None = None
+    built_in = get_built_in_preset(preset_id)
+    if built_in:
+        criteria = built_in.criteria
+    else:
+        preset_row = await session.get(PresetTable, preset_id)
+        if preset_row and preset_row.user_id != current_user.id:
+            preset_row = None
+        if preset_row:
+            criteria = PresetCriteria(**json.loads(preset_row.criteria))
+
+    if not criteria:
+        return cards
+
+    def _score(card: Hangout) -> int:
+        haystack = " ".join([
+            card.title.lower(),
+            (card.description or "").lower(),
+            " ".join([t.lower() for t in card.tags]),
+        ])
+        score = 0
+        for keyword in criteria.activity_preferences + criteria.cuisine_preferences:
+            if keyword.lower() in haystack:
+                score += 3
+        for vibe in criteria.dealbreakers:
+            if vibe.lower() in haystack:
+                score -= 2
+        return score
+
+    ranked = sorted(cards, key=_score, reverse=True)
+    return ranked
 
 
 # ── Swipe ──────────────────────────────────────────────────────────────

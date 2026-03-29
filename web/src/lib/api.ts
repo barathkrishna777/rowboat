@@ -327,7 +327,7 @@ export interface Preset {
 
 export const hangouts = {
   list: () => request<Hangout[]>("/hangouts"),
-  feed: () => request<Hangout[]>("/hangouts/feed/me"),
+  feed: (presetId?: string) => request<Hangout[]>(`/hangouts/feed/me${presetId ? `?preset_id=${encodeURIComponent(presetId)}` : ""}`),
   create: (data: { title: string; description?: string; tags?: string[]; location_area?: string }) =>
     request<Hangout>("/hangouts", { method: "POST", body: JSON.stringify(data) }),
   swipe: (hangoutId: string, action: "pass" | "interested") =>

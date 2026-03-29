@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 export default function SwipePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const [presetId, setPresetId] = useState<string | undefined>(undefined);
   const [feed, setFeed] = useState<Hangout[]>([]);
   const [index, setIndex] = useState(0);
   const [matches, setMatches] = useState<SuggestedMatch[]>([]);
@@ -15,16 +16,22 @@ export default function SwipePage() {
 
   const loadFeed = useCallback(async () => {
     try {
-      const data = await hangoutsApi.feed();
+      const data = await hangoutsApi.feed(presetId);
       setFeed(data);
       setIndex(0);
     } catch { /* ignore */ }
-  }, []);
+  }, [presetId]);
 
   useEffect(() => {
     if (!loading && !user) { router.replace("/login"); return; }
     if (user) loadFeed();
   }, [loading, user, router, loadFeed]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search).get("preset_id") || undefined;
+    setPresetId(p);
+  }, []);
 
   const handleSwipe = async (action: "pass" | "interested") => {
     const card = feed[index];
@@ -76,6 +83,9 @@ export default function SwipePage() {
   return (
     <div className="max-w-md mx-auto">
       <h1 className="text-2xl font-bold mb-6 text-center text-[var(--text)]">Discover Hangouts</h1>
+      {presetId && (
+        <p className="text-sm text-center text-[var(--text-muted)] mb-4">Preset-tailored suggestions are active.</p>
+      )}
 
       {/* Suggested matches banner */}
       {matches.length > 0 && (
