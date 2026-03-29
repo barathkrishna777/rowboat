@@ -19,7 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a href="/" className="text-xl font-bold text-orange-500">Rowboat</a>
               <div className="flex items-center gap-4 text-sm">
                 <a href="/plan" className="font-semibold hover:text-orange-500">Plan Outing</a>
-                <a href="/swipe" className="hover:text-orange-500">Discover</a>
+                <a href="/discover" className="hover:text-orange-500">Discover</a>
                 <a href="/friends" className="hover:text-orange-500">Friends</a>
                 <a href="/profile" className="hover:text-orange-500">Profile</a>
                 <DarkModeToggle />
