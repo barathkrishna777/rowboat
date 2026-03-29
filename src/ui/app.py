@@ -141,6 +141,30 @@ st.markdown("""
     .request-card { background: #FFFBF5; border: 1px solid #FFE0C2; border-radius: 12px; padding: 14px 16px; margin-bottom: 8px; }
     .friends-empty { text-align: center; padding: 2rem; color: #8E99A4; }
     .friends-empty-icon { font-size: 48px; margin-bottom: 8px; }
+
+    /* ── Mode Toggle (Plan / Discover) ───────────────── */
+    .mode-toggle { display: flex; justify-content: center; gap: 12px; margin: 0.5rem 0 1.5rem; }
+    .mode-tab { display: inline-flex; align-items: center; gap: 8px; padding: 10px 28px;
+                border-radius: 30px; font-weight: 600; font-size: 15px; cursor: pointer;
+                transition: all 0.2s ease; border: 2px solid transparent; text-decoration: none; }
+    .mode-tab-active { background: #FF690F; color: white; box-shadow: 0 2px 8px rgba(255,105,15,0.3); }
+    .mode-tab-inactive { background: #F5F7FA; color: #6B7785; border-color: #E4E8EC; }
+    .mode-tab-inactive:hover { background: #E8ECF0; color: #363F45; }
+
+    /* ── Discovery: Hangout Cards ────────────────────── */
+    .hangout-card { background: white; border: 1px solid #E8ECF0; border-radius: 16px;
+                    padding: 1.5rem; margin-bottom: 1rem; transition: all 0.2s ease; }
+    .hangout-card:hover { border-color: #FF690F; box-shadow: 0 4px 16px rgba(255,105,15,0.1); }
+    .hangout-title { font-size: 20px; font-weight: 700; color: #192024; margin-bottom: 6px; }
+    .hangout-desc { font-size: 14px; color: #6B7785; margin-bottom: 10px; line-height: 1.5; }
+    .hangout-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .hangout-tag { background: #FFF3EB; color: #FF690F; padding: 4px 12px; border-radius: 20px;
+                   font-size: 12px; font-weight: 600; }
+    .hangout-tag.active-tag { background: #FF690F; color: white; }
+    .hangout-meta { font-size: 13px; color: #8E99A4; display: flex; align-items: center; gap: 6px; }
+    .hangout-empty { text-align: center; padding: 3rem 1rem; color: #8E99A4; }
+    .hangout-empty-icon { font-size: 56px; margin-bottom: 12px; }
+    .hangout-empty-text { font-size: 16px; font-weight: 500; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -169,6 +193,12 @@ if "friend_req_counter" not in st.session_state:
 if "auth_token" not in st.session_state:
     st.session_state.auth_token = None
     st.session_state.auth_user = None
+if "app_mode" not in st.session_state:
+    st.session_state.app_mode = "plan"
+if "discovery_feed" not in st.session_state:
+    st.session_state.discovery_feed = None
+if "selected_tags" not in st.session_state:
+    st.session_state.selected_tags = []
 
 # ── Pick up auth token from Google OAuth redirect ─────────────────────
 _qp = st.query_params
@@ -374,6 +404,29 @@ with _signout_col2:
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
+
+# ── Mode Toggle: Plan / Discover ─────────────────────────────────────
+_plan_cls = "mode-tab-active" if st.session_state.app_mode == "plan" else "mode-tab-inactive"
+_disc_cls = "mode-tab-active" if st.session_state.app_mode == "discover" else "mode-tab-inactive"
+st.markdown(
+    f'<div class="mode-toggle">'
+    f'<span class="mode-tab {_plan_cls}" id="mode-plan">📋 Plan an Outing</span>'
+    f'<span class="mode-tab {_disc_cls}" id="mode-discover">🔍 Discover Hangouts</span>'
+    f'</div>',
+    unsafe_allow_html=True,
+)
+_mode_col1, _mode_col2 = st.columns(2)
+with _mode_col1:
+    if st.button("Plan an Outing", key="mode_plan_btn", type="primary" if st.session_state.app_mode == "plan" else "secondary", use_container_width=True):
+        if st.session_state.app_mode != "plan":
+            st.session_state.app_mode = "plan"
+            st.rerun()
+with _mode_col2:
+    if st.button("Discover Hangouts", key="mode_discover_btn", type="primary" if st.session_state.app_mode == "discover" else "secondary", use_container_width=True):
+        if st.session_state.app_mode != "discover":
+            st.session_state.app_mode = "discover"
+            st.session_state.discovery_feed = None  # refresh feed on switch
+            st.rerun()
 
 # ── Avatar color helper ───────────────────────────────────────────────
 _AVATAR_COLORS = ["#FF690F", "#1DB954", "#4A90D9", "#9B59B6", "#E74C3C", "#F39C12", "#1ABC9C", "#34495E"]
@@ -598,6 +651,224 @@ if st.session_state.get("user_id"):
         st.markdown("---")
 
 
+# ══════════════════════════════════════════════════════════════════════
+# DISCOVER MODE
+# ══════════════════════════════════════════════════════════════════════
+
+import hashlib
+
+
+def _bubble_html(all_tags: list[str], selected_tags: list[str], tag_counts: dict[str, int]) -> str:
+    """Generate the floating-bubble HTML/CSS/JS component."""
+    max_count = max(tag_counts.values()) if tag_counts else 1
+    bubbles = ""
+    keyframes = ""
+    # Lay out bubbles in a grid-like pattern to avoid overlap, then let animation drift them
+    cols = 5
+    for idx, tag in enumerate(all_tags):
+        # Size: proportional to tag frequency (min 70px, max 130px)
+        freq = tag_counts.get(tag, 1)
+        size = 70 + int(60 * (freq / max_count))
+        # Position: grid-based with jitter
+        row, col = divmod(idx, cols)
+        hash_val = int(hashlib.md5(tag.encode()).hexdigest()[:8], 16)
+        jitter_x = (hash_val % 30) - 15
+        jitter_y = ((hash_val >> 8) % 30) - 15
+        left_pct = 8 + (col * 18) + (jitter_x * 0.3)
+        top_pct = 10 + (row * 22) + (jitter_y * 0.3)
+        left_pct = max(2, min(85, left_pct))
+        top_pct = max(3, min(75, top_pct))
+        is_active = tag in selected_tags
+        cls = "bubble-active" if is_active else "bubble-inactive"
+        # Per-bubble float animation
+        drift_x = 8 + (hash_val % 12)
+        drift_y = 6 + ((hash_val >> 4) % 10)
+        duration = 4 + (hash_val % 5)
+        delay = (hash_val % 3)
+        keyframes += f"""
+        @keyframes float-{idx} {{
+            0%, 100% {{ transform: translate(0, 0) scale({1.15 if is_active else 1}); }}
+            33% {{ transform: translate({drift_x}px, -{drift_y}px) scale({1.15 if is_active else 1}); }}
+            66% {{ transform: translate(-{drift_x // 2}px, {drift_y // 2}px) scale({1.15 if is_active else 1}); }}
+        }}
+        """
+        bubbles += (
+            f'<div class="disco-bubble {cls}" style="'
+            f"width:{size}px; height:{size}px; left:{left_pct}%; top:{top_pct}%;"
+            f"animation: float-{idx} {duration}s ease-in-out {delay}s infinite;"
+            f'">{tag}</div>'
+        )
+
+    return f"""
+    <div id="bubble-container" style="position:relative; width:100%; height:400px;
+         background: linear-gradient(135deg, #FAFBFC 0%, #F0F2F5 50%, #FFF9F5 100%);
+         border-radius:16px; overflow:hidden; border:1px solid #E8ECF0;">
+      {bubbles}
+    </div>
+    <style>
+      .disco-bubble {{
+        position: absolute;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center; text-align: center;
+        font-weight: 600; font-size: 12px; padding: 8px;
+        cursor: default; user-select: none;
+        transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        word-break: break-word; line-height: 1.2;
+      }}
+      .bubble-inactive {{
+        background: white; border: 2px solid #E4E8EC; color: #8E99A4; opacity: 0.55;
+      }}
+      .bubble-active {{
+        background: #FF690F; border: 2px solid #FF690F; color: white;
+        opacity: 1; box-shadow: 0 4px 20px rgba(255,105,15,0.4); z-index: 10;
+      }}
+      {keyframes}
+    </style>
+    """
+
+
+def render_discovery():
+    """Render the hangout discovery page with bubble filters and swipe cards."""
+    st.markdown(
+        '<div class="section-card">'
+        '<div class="section-title">Discover Hangouts</div>'
+        '<div class="section-subtitle">Pick your vibe — select tags to filter hangouts, then swipe!</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Fetch feed ────────────────────────────────────────────────────
+    if st.session_state.discovery_feed is None:
+        with st.spinner("Loading hangouts..."):
+            try:
+                resp = httpx.get(
+                    f"{API_BASE}/hangouts/feed/me",
+                    headers=_auth_headers(),
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                st.session_state.discovery_feed = resp.json()
+            except Exception as e:
+                st.error(f"Could not load hangouts: {e}")
+                st.session_state.discovery_feed = []
+
+    feed = st.session_state.discovery_feed or []
+
+    if not feed:
+        st.markdown(
+            '<div class="hangout-empty">'
+            '<div class="hangout-empty-icon">🎉</div>'
+            '<div class="hangout-empty-text">You\'ve seen all hangouts! Check back later.</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        if st.button("Refresh Feed", key="refresh_feed"):
+            st.session_state.discovery_feed = None
+            st.rerun()
+        return
+
+    # ── Extract tags ──────────────────────────────────────────────────
+    tag_counts: dict[str, int] = {}
+    for h in feed:
+        for t in (h.get("tags") or []):
+            tag_counts[t] = tag_counts.get(t, 0) + 1
+    all_tags = sorted(tag_counts.keys())
+
+    if not all_tags:
+        st.info("No tags available for filtering. Showing all hangouts.")
+
+    # ── Tag Selector ──────────────────────────────────────────────────
+    if all_tags:
+        selected = st.multiselect(
+            "🫧 Pick your vibe",
+            options=all_tags,
+            default=[t for t in st.session_state.selected_tags if t in all_tags],
+            key="tag_picker",
+            help="Select tags to filter hangouts. Matching bubbles light up above!",
+        )
+        st.session_state.selected_tags = selected
+    else:
+        selected = []
+
+    # ── Bubble Animation ──────────────────────────────────────────────
+    if all_tags:
+        bubble_component = _bubble_html(all_tags, selected, tag_counts)
+        components.html(bubble_component, height=420, scrolling=False)
+
+    # ── Filter hangouts ───────────────────────────────────────────────
+    if selected:
+        filtered = [h for h in feed if set(h.get("tags") or []) & set(selected)]
+    else:
+        filtered = feed
+
+    if not filtered and selected:
+        st.markdown(
+            '<div class="hangout-empty">'
+            '<div class="hangout-empty-icon">🔍</div>'
+            '<div class="hangout-empty-text">No hangouts match these tags. Try different ones!</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    # ── Render hangout cards with swipe ───────────────────────────────
+    st.markdown(f"**Showing {len(filtered)} hangout{'s' if len(filtered) != 1 else ''}**")
+
+    for h in filtered:
+        tags_html = "".join(
+            f'<span class="hangout-tag{"  active-tag" if t in selected else ""}">{t}</span>'
+            for t in (h.get("tags") or [])
+        )
+        location = h.get("location_area") or ""
+        loc_html = f' <span class="hangout-meta">📍 {location}</span>' if location else ""
+
+        st.markdown(
+            f'<div class="hangout-card">'
+            f'<div class="hangout-title">{h["title"]}</div>'
+            f'<div class="hangout-desc">{h.get("description") or ""}</div>'
+            f'<div class="hangout-tags">{tags_html}</div>'
+            f'{loc_html}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            if st.button("👍 Interested", key=f"interested_{h['id']}", use_container_width=True, type="primary"):
+                try:
+                    resp = httpx.post(
+                        f"{API_BASE}/hangouts/{h['id']}/swipe",
+                        json={"action": "interested"},
+                        headers=_auth_headers(),
+                        timeout=5.0,
+                    )
+                    resp.raise_for_status()
+                    st.toast(f"You're interested in {h['title']}!", icon="🎉")
+                    st.session_state.discovery_feed = None  # refresh
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Swipe failed: {e}")
+        with btn_col2:
+            if st.button("👋 Pass", key=f"pass_{h['id']}", use_container_width=True):
+                try:
+                    resp = httpx.post(
+                        f"{API_BASE}/hangouts/{h['id']}/swipe",
+                        json={"action": "pass"},
+                        headers=_auth_headers(),
+                        timeout=5.0,
+                    )
+                    resp.raise_for_status()
+                    st.session_state.discovery_feed = None  # refresh
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Swipe failed: {e}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# PLAN MODE — Stepper + Step Pages
+# ══════════════════════════════════════════════════════════════════════
+
+
 def render_stepper():
     cur = st.session_state.current_step
     done = st.session_state.completed_steps
@@ -610,6 +881,11 @@ def render_stepper():
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
+
+# ── Route to active mode ─────────────────────────────────────────────
+if st.session_state.app_mode == "discover":
+    render_discovery()
+    st.stop()
 
 render_stepper()
 
