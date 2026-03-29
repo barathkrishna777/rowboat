@@ -69,13 +69,13 @@ export default function SwipePage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  if (loading || !user) return <p className="text-center mt-20">Loading...</p>;
+  if (loading || !user) return <p className="text-center mt-20 text-[var(--text)]">Loading...</p>;
 
   const card = feed[index];
 
   return (
     <div className="max-w-md mx-auto">
-      <h1 className="text-2xl font-bold mb-6 text-center">Discover Hangouts</h1>
+      <h1 className="text-2xl font-bold mb-6 text-center text-[var(--text)]">Discover Hangouts</h1>
 
       {/* Suggested matches banner */}
       {matches.length > 0 && (
@@ -100,13 +100,13 @@ export default function SwipePage() {
 
       {/* Swipe card */}
       {card ? (
-        <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm">
-          <h2 className="text-xl font-bold mb-2 text-gray-900 dark:text-slate-100">{card.title}</h2>
+        <div className="bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] rounded-2xl p-6 shadow-sm">
+          <h2 className="text-xl font-bold mb-2">{card.title}</h2>
           {card.description && (
-            <p className="text-gray-600 dark:text-slate-300 mb-3 leading-relaxed">{card.description}</p>
+            <p className="text-[var(--text-muted)] mb-3 leading-relaxed">{card.description}</p>
           )}
           {card.location_area && (
-            <p className="text-sm text-gray-500 dark:text-slate-400 mb-2">📍 {card.location_area}</p>
+            <p className="text-sm text-[var(--text-muted)] mb-2">📍 {card.location_area}</p>
           )}
           {card.tags.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-4">
@@ -120,7 +120,7 @@ export default function SwipePage() {
           <div className="flex gap-4 mt-4">
             <button
               onClick={() => handleSwipe("pass")}
-              className="flex-1 border border-gray-300 dark:border-slate-600 rounded-lg py-3 font-semibold text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700"
+              className="flex-1 border border-[var(--border)] rounded-lg py-3 font-semibold text-[var(--text)] hover:bg-black/5 dark:hover:bg-white/10"
             >
               Pass
             </button>
@@ -131,17 +131,17 @@ export default function SwipePage() {
               Interested ✓
             </button>
           </div>
-          <p className="text-xs text-gray-400 dark:text-slate-500 text-center mt-2">or use arrow keys ← →</p>
+          <p className="text-xs text-[var(--text-muted)] text-center mt-2">or use arrow keys ← →</p>
         </div>
       ) : (
-        <div className="text-center text-gray-400 dark:text-slate-500 mt-12">
+        <div className="text-center text-[var(--text-muted)] mt-12">
           <p className="text-4xl mb-2">✨</p>
           <p>No more hangouts to discover right now.</p>
-          <button onClick={loadFeed} className="mt-4 text-orange-500 font-medium hover:text-orange-600">Refresh feed</button>
+          <button onClick={loadFeed} className="mt-4 text-orange-600 dark:text-orange-400 font-medium hover:text-orange-700 dark:hover:text-orange-300">Refresh feed</button>
         </div>
       )}
 
-      <p className="text-xs text-gray-400 text-center mt-6">
+      <p className="text-xs text-[var(--text-muted)] text-center mt-6">
         {feed.length > 0 && index < feed.length ? `${index + 1} / ${feed.length}` : ""}
       </p>
     </div>

@@ -4,8 +4,8 @@
  */
 
 export const cls = {
-  // Page-level card / panel
-  card: "bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl",
+  // Page-level card / panel (tokens keep surface + text in sync in dark mode)
+  card: "bg-[var(--surface)] border border-[var(--border)] rounded-xl text-[var(--text)]",
 
   // Form inputs
   input: "w-full border border-gray-300 dark:border-slate-600 rounded-lg px-4 py-2.5 text-sm " +
@@ -22,16 +22,16 @@ export const cls = {
   btnPrimary: "bg-orange-500 text-white rounded-lg py-2.5 px-4 font-semibold " +
     "hover:bg-orange-600 disabled:opacity-50 transition-colors",
 
-  btnOutline: "border border-gray-300 dark:border-slate-600 rounded-lg py-2.5 px-4 " +
-    "text-gray-600 dark:text-slate-300 font-semibold " +
-    "hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors",
+  btnOutline: "border border-[var(--border)] rounded-lg py-2.5 px-4 " +
+    "text-[var(--text)] font-semibold " +
+    "hover:bg-black/5 dark:hover:bg-white/10 transition-colors",
 
   // Labels
-  label: "text-sm font-medium text-gray-600 dark:text-slate-400",
+  label: "text-sm font-medium text-[var(--text-muted)]",
 
   // Muted text
-  muted: "text-gray-500 dark:text-slate-400",
+  muted: "text-[var(--text-muted)]",
 
   // Divider
-  divider: "border-t border-gray-200 dark:border-slate-700",
+  divider: "border-t border-[var(--border)]",
 } as const;

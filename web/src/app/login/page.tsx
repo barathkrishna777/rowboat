@@ -35,7 +35,7 @@ export default function LoginPage() {
 
   return (
     <div className="max-w-sm mx-auto mt-16">
-      <h1 className="text-2xl font-bold mb-6 text-center">Sign in to Rowboat</h1>
+      <h1 className="text-2xl font-bold mb-6 text-center text-[var(--text)]">Sign in to Rowboat</h1>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <input type="email" placeholder="Email" value={email}
           onChange={(e) => setEmail(e.target.value)} required className={cls.input} />
@@ -51,7 +51,7 @@ export default function LoginPage() {
       </button>
       <p className="text-center text-sm mt-4" style={{ color: "var(--text-muted)" }}>
         No account?{" "}
-        <a href="/register" className="text-orange-500 font-medium">Register</a>
+        <a href="/register" className="text-orange-600 dark:text-orange-400 font-medium hover:underline">Register</a>
       </p>
     </div>
   );

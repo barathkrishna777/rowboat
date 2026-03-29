@@ -38,11 +38,11 @@ export default function ProfilePage() {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  if (loading || !user) return <p className="text-center mt-20">Loading...</p>;
+  if (loading || !user) return <p className="text-center mt-20 text-[var(--text)]">Loading...</p>;
 
   return (
     <div className="max-w-md mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Your Profile</h1>
+      <h1 className="text-2xl font-bold mb-6 text-[var(--text)]">Your Profile</h1>
       <form onSubmit={handleSave} className="flex flex-col gap-4">
         <div>
           <label className={`${cls.label} block mb-1`}>Display Name</label>

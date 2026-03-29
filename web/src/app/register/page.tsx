@@ -26,7 +26,7 @@ export default function RegisterPage() {
 
   return (
     <div className="max-w-sm mx-auto mt-16">
-      <h1 className="text-2xl font-bold mb-6 text-center">Create your account</h1>
+      <h1 className="text-2xl font-bold mb-6 text-center text-[var(--text)]">Create your account</h1>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <input type="text" placeholder="Full name" value={name}
           onChange={(e) => setName(e.target.value)} required className={cls.input} />
@@ -39,7 +39,7 @@ export default function RegisterPage() {
       </form>
       <p className="text-center text-sm mt-4" style={{ color: "var(--text-muted)" }}>
         Already have an account?{" "}
-        <a href="/login" className="text-orange-500 font-medium">Sign in</a>
+        <a href="/login" className="text-orange-600 dark:text-orange-400 font-medium hover:underline">Sign in</a>
       </p>
     </div>
   );
