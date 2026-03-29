@@ -64,7 +64,6 @@ export default function PresetsPage() {
       setBusyId(null);
     }
   };
-
   if (loading) return <p className="text-center mt-20 text-[var(--text)]">Loading...</p>;
   if (!user) return null;
 
