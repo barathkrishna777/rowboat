@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class Settings(BaseSettings):
     # LLM Providers
     gemini_api_key: str = ""
-    google_api_key: str = ""  # Alias — PydanticAI reads GOOGLE_API_KEY
+    google_api_key: str = ""  # Alias — PydanticAI reads GOOGLE_API_KEY for Gemini
     anthropic_api_key: str = ""
     groq_api_key: str = ""
 
@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     yelp_api_key: str = ""
     eventbrite_api_key: str = ""
     ticketmaster_api_key: str = ""
+    # Separate Google Places key — use a Restricted API key scoped to Places API only.
+    # If unset, falls back to google_api_key / gemini_api_key (shared key).
+    google_places_api_key: str = ""
 
     # Google Maps Embed
     google_maps_embed_key: str = ""
@@ -94,11 +97,12 @@ class Settings(BaseSettings):
         the environment — this method pushes the loaded settings values back
         into os.environ so the provider SDKs always see the correct keys.
         """
-        # Google / Gemini
-        key = self.gemini_api_key or self.google_api_key
-        if key:
-            os.environ["GOOGLE_API_KEY"] = key
-            self.google_api_key = key
+        # Google / Gemini — push whichever key into the env var PydanticAI reads.
+        # We do NOT overwrite self.google_api_key so it remains available as
+        # a fallback for Google Places if GOOGLE_PLACES_API_KEY is not set.
+        gemini_key = self.gemini_api_key or self.google_api_key
+        if gemini_key:
+            os.environ["GOOGLE_API_KEY"] = gemini_key
 
         # Anthropic / Claude
         if self.anthropic_api_key:

@@ -93,8 +93,10 @@ function VenueCard({ venue, score, passed, selected, onSelect, violation }: {
   venue: Venue; score?: number; passed?: boolean; selected?: boolean;
   onSelect?: () => void; violation?: string[];
 }) {
-  const badge = score !== undefined
-    ? score >= 70 ? "bg-green-100 text-green-700" : score >= 40 ? "bg-orange-100 text-orange-700" : "bg-red-100 text-red-700"
+  // score is 0–1 from the backend
+  const pct = score !== undefined ? Math.round(score * 100) : undefined;
+  const badge = pct !== undefined
+    ? pct >= 70 ? "bg-green-100 text-green-700" : pct >= 40 ? "bg-orange-100 text-orange-700" : "bg-red-100 text-red-700"
     : "bg-gray-100 text-gray-600";
 
   return (
@@ -108,8 +110,8 @@ function VenueCard({ venue, score, passed, selected, onSelect, violation }: {
           <div className="text-xs text-gray-400 mt-0.5">{venue.categories?.join(", ")}</div>
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
-          {score !== undefined && (
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${badge}`}>{score}%</span>
+          {pct !== undefined && (
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${badge}`}>{pct}%</span>
           )}
           {venue.price_tier && <span className="text-sm">{venue.price_tier}</span>}
           {venue.rating && <span className="text-xs text-yellow-600">⭐ {venue.rating}</span>}
@@ -435,9 +437,53 @@ function PlanPageInner() {
                 </button>
               </div>
 
-              <button onClick={() => setStep(2)}
-                className="w-full bg-orange-500 text-white rounded-lg py-2.5 font-semibold hover:bg-orange-600">
-                Continue →
+              {/* ── Two-path choice ── */}
+              <p className="text-sm font-semibold text-gray-500 dark:text-slate-400 text-center pt-1">How do you want to plan?</p>
+
+              {/* Path A — AI orchestrator */}
+              <div className="rounded-xl border border-orange-200 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/40 p-4 space-y-3">
+                <div>
+                  <p className="font-bold text-orange-700 dark:text-orange-300">🚣 Let Rowboat do the rest</p>
+                  <p className="text-sm text-orange-600 dark:text-orange-400 mt-0.5">
+                    Describe the vibe — AI picks venues, times &amp; plan for you.
+                  </p>
+                </div>
+                <input
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="What kind of outing? (e.g. dinner and bowling)"
+                  className="w-full border border-orange-200 dark:border-orange-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+                <input
+                  value={location}
+                  onChange={e => setLocation(e.target.value)}
+                  placeholder="Location (e.g. Pittsburgh, PA)"
+                  className="w-full border border-orange-200 dark:border-orange-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+                <button
+                  onClick={handleOrchestrate}
+                  disabled={!searchQuery || orchestrating}
+                  className="w-full bg-orange-500 text-white rounded-xl py-3 font-bold text-base hover:bg-orange-600 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                >
+                  {orchestrating
+                    ? <><span className="animate-spin inline-block">⏳</span> Rowboat is planning…</>
+                    : <>🚣 Plan our outing →</>}
+                </button>
+              </div>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-gray-200 dark:bg-slate-700" />
+                <span className="text-xs text-gray-400 dark:text-slate-500 shrink-0">or</span>
+                <div className="flex-1 h-px bg-gray-200 dark:bg-slate-700" />
+              </div>
+
+              {/* Path B — manual step-by-step */}
+              <button
+                onClick={() => setStep(2)}
+                className="w-full border border-gray-300 dark:border-slate-600 rounded-xl py-3 font-semibold text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+              >
+                Customize step by step →
               </button>
             </div>
           )}

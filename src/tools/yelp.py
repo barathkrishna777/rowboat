@@ -116,7 +116,11 @@ async def search_yelp(
             )
             resp.raise_for_status()
             data = resp.json()
-        return [_yelp_to_venue(biz) for biz in data.get("businesses", [])]
+        return [
+            _yelp_to_venue(biz)
+            for biz in data.get("businesses", [])
+            if not biz.get("is_closed")  # exclude permanently closed businesses
+        ]
     except Exception:
         return []
 

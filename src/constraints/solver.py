@@ -39,12 +39,16 @@ def _venue_price_level(venue: Venue) -> int:
 
 
 def _text_match_score(needles: list[str], haystack: str) -> float:
-    """Fuzzy match: what fraction of needles appear in haystack (case-insensitive)?"""
+    """OR-logic match: returns 1.0 if ANY needle appears in haystack, 0.0 if none do.
+
+    Preferences are additive options ("I'm open to Italian OR Japanese OR Mexican"),
+    not requirements that all need to be satisfied simultaneously. A venue that
+    matches even one selected preference is a good match.
+    """
     if not needles:
         return 0.0
     haystack_lower = haystack.lower()
-    matches = sum(1 for n in needles if n.lower() in haystack_lower)
-    return matches / len(needles)
+    return 1.0 if any(n.lower() in haystack_lower for n in needles) else 0.0
 
 
 # ── Hard constraint checks (now return penalty multiplier) ────────
