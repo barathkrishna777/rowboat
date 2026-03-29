@@ -1,18 +1,47 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { hangouts as hangoutsApi, Hangout, SuggestedMatch } from "@/lib/api";
+import {
+  hangouts as hangoutsApi,
+  plans as plansApi,
+  Hangout,
+  SuggestedMatch,
+  OrchestratorPlan,
+  ScoredVenue,
+} from "@/lib/api";
 import { useRouter } from "next/navigation";
+
+type Mode = "landing" | "vibe_input" | "custom_preset";
 
 export default function SwipePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+
+  // Mode
+  const [mode, setMode] = useState<Mode>("landing");
+
+  // Custom Preset state (existing bubble-filter flow)
   const [feed, setFeed] = useState<Hangout[]>([]);
   const [index, setIndex] = useState(0);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [matches, setMatches] = useState<SuggestedMatch[]>([]);
   const [creating, setCreating] = useState(false);
+
+  // Pick Your Vibe state
+  const [vibeKeywords, setVibeKeywords] = useState<string[]>([]);
+  const [vibeInput, setVibeInput] = useState("");
+  const [orchestratorResult, setOrchestratorResult] = useState<OrchestratorPlan | null>(null);
+  const [vibeLoading, setVibeLoading] = useState(false);
+  const [vibeIndex, setVibeIndex] = useState(0);
+  const orchestrateAbort = useRef<AbortController | null>(null);
+
+  // Auth guard
+  useEffect(() => {
+    if (!loading && !user) router.replace("/login");
+  }, [loading, user, router]);
+
+  // ── Custom Preset helpers ──────────────────────────────────────────
 
   const loadFeed = useCallback(async () => {
     try {
@@ -23,9 +52,8 @@ export default function SwipePage() {
   }, []);
 
   useEffect(() => {
-    if (!loading && !user) { router.replace("/login"); return; }
-    if (user) loadFeed();
-  }, [loading, user, router, loadFeed]);
+    if (user && mode === "custom_preset") loadFeed();
+  }, [user, mode, loadFeed]);
 
   const { allTags, tagCounts } = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -54,15 +82,12 @@ export default function SwipePage() {
     const card = filteredFeed[index];
     if (!card) return;
     await hangoutsApi.swipe(card.id, action);
-
-    // If interested, try to generate matches
     if (action === "interested") {
       try {
         const m = await hangoutsApi.generateMatches(card.id);
         if (m.length > 0) setMatches((prev) => [...prev, ...m]);
       } catch { /* ok */ }
     }
-
     setIndex((i) => i + 1);
   };
 
@@ -71,8 +96,7 @@ export default function SwipePage() {
     try {
       const result = await hangoutsApi.createGroupFromMatch(matchId);
       if (result.group_id) {
-        // Update the local match so the link becomes a real href
-        setMatches((prev) => prev.map(m => m.id === matchId ? result : m));
+        setMatches((prev) => prev.map((m) => (m.id === matchId ? result : m)));
         router.push(`/plan?group_id=${result.group_id}`);
       }
     } catch (err: unknown) {
@@ -82,45 +106,379 @@ export default function SwipePage() {
     }
   };
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === "ArrowLeft") handleSwipe("pass");
-    if (e.key === "ArrowRight") handleSwipe("interested");
+  // Arrow-key swipe for custom_preset mode
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (mode !== "custom_preset") return;
+      if (e.key === "ArrowLeft") handleSwipe("pass");
+      if (e.key === "ArrowRight") handleSwipe("interested");
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, feed]);
+    [index, feed, mode],
+  );
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  if (loading || !user) return <p className="text-center mt-20">Loading...</p>;
+  // ── Vibe helpers ───────────────────────────────────────────────────
+
+  const triggerOrchestrate = useCallback(async (keywords: string[]) => {
+    if (!keywords.length) {
+      setOrchestratorResult(null);
+      return;
+    }
+    if (orchestrateAbort.current) orchestrateAbort.current.abort();
+    orchestrateAbort.current = new AbortController();
+
+    setVibeLoading(true);
+    setVibeIndex(0);
+    try {
+      const result = await plansApi.orchestrate({
+        request: keywords.join(", "),
+        location: "Pittsburgh, PA",
+      });
+      setOrchestratorResult(result);
+    } catch {
+      setOrchestratorResult(null);
+    } finally {
+      setVibeLoading(false);
+    }
+  }, []);
+
+  const addKeyword = (kw: string) => {
+    const trimmed = kw.trim();
+    if (!trimmed || vibeKeywords.includes(trimmed)) return;
+    const next = [...vibeKeywords, trimmed];
+    setVibeKeywords(next);
+    setVibeInput("");
+    triggerOrchestrate(next);
+  };
+
+  const removeKeyword = (kw: string) => {
+    const next = vibeKeywords.filter((k) => k !== kw);
+    setVibeKeywords(next);
+    triggerOrchestrate(next);
+  };
+
+  const handleVibeSwipe = async (venue: ScoredVenue, action: "pass" | "interested") => {
+    if (action === "interested") {
+      try {
+        const created = await hangoutsApi.create({
+          title: venue.name,
+          description: venue.explanation || `${venue.name} at ${venue.address}`,
+          tags: venue.categories || [],
+          location_area: venue.address,
+        });
+        await hangoutsApi.swipe(created.id, "interested");
+      } catch { /* ok */ }
+    }
+    setVibeIndex((i) => i + 1);
+  };
+
+  // ── Render guards ──────────────────────────────────────────────────
+
+  if (loading || !user) return <p className="text-center mt-20 text-white">Loading...</p>;
+
+  // ── Shared components ──────────────────────────────────────────────
+
+  const GlowBlob = ({ size = "h-72 w-72" }: { size?: string }) => (
+    <div className="absolute inset-0 flex justify-center pointer-events-none">
+      <div
+        className={`mt-16 ${size} rounded-full bg-[radial-gradient(circle,_rgba(89,135,255,0.4)_0%,_rgba(255,149,0,0.3)_30%,_rgba(167,80,255,0.25)_55%,_rgba(0,0,0,0)_80%)] blur-3xl animate-pulse-slow`}
+      />
+    </div>
+  );
+
+  const BackButton = () => (
+    <button
+      onClick={() => {
+        setMode("landing");
+        setVibeKeywords([]);
+        setOrchestratorResult(null);
+        setVibeInput("");
+        setVibeIndex(0);
+      }}
+      className="absolute top-0 left-0 z-30 text-white/60 hover:text-white transition text-sm font-medium flex items-center gap-1"
+    >
+      <span className="text-lg">&larr;</span> Back
+    </button>
+  );
+
+  // ── LANDING ────────────────────────────────────────────────────────
+
+  if (mode === "landing") {
+    return (
+      <div className="min-h-[calc(100vh-80px)] -mx-4 sm:mx-0 rounded-3xl bg-[#04070F] text-white px-4 sm:px-8 py-12 overflow-hidden">
+        <div className="max-w-3xl mx-auto relative">
+          <GlowBlob size="h-80 w-80" />
+
+          <div className="relative z-10 flex flex-col items-center pt-20 pb-12">
+            <h1 className="text-5xl sm:text-6xl font-bold text-center tracking-tight mb-3 bg-gradient-to-r from-blue-300 via-orange-200 to-purple-300 bg-clip-text text-transparent">
+              Choose Your Vibe
+            </h1>
+            <p className="text-white/50 text-lg mb-16">How do you want to discover?</p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full max-w-lg">
+              {/* Pick Your Vibe card */}
+              <button
+                onClick={() => setMode("vibe_input")}
+                className="group relative bg-white/[0.06] backdrop-blur-sm border border-white/10 rounded-2xl p-8 text-center hover:border-orange-400/50 hover:bg-white/[0.09] transition-all duration-300"
+              >
+                <div className="text-5xl mb-4">&#x2728;</div>
+                <h2 className="text-xl font-bold mb-2">Pick Your Vibe</h2>
+                <p className="text-sm text-white/50">Type what you feel like and we&apos;ll find matching plans</p>
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-orange-500/0 to-purple-500/0 group-hover:from-orange-500/5 group-hover:to-purple-500/5 transition-all duration-300" />
+              </button>
+
+              {/* Custom Preset card */}
+              <button
+                onClick={() => setMode("custom_preset")}
+                className="group relative bg-white/[0.06] backdrop-blur-sm border border-white/10 rounded-2xl p-8 text-center hover:border-blue-400/50 hover:bg-white/[0.09] transition-all duration-300"
+              >
+                <div className="text-5xl mb-4">&#x1F3AF;</div>
+                <h2 className="text-xl font-bold mb-2">Custom Preset</h2>
+                <p className="text-sm text-white/50">Browse and filter from curated hangout categories</p>
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-500/0 to-cyan-500/0 group-hover:from-blue-500/5 group-hover:to-cyan-500/5 transition-all duration-300" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <style jsx>{`
+          .animate-pulse-slow { animation: pulseSlow 4s ease-in-out infinite; }
+          @keyframes pulseSlow {
+            0%, 100% { opacity: 0.7; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.08); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // ── VIBE INPUT ─────────────────────────────────────────────────────
+
+  if (mode === "vibe_input") {
+    const rankedVenues = orchestratorResult?.ranked_venues || [];
+    const currentVenue = rankedVenues[vibeIndex] as ScoredVenue | undefined;
+
+    return (
+      <div className="min-h-[calc(100vh-80px)] -mx-4 sm:mx-0 rounded-3xl bg-[#04070F] text-white px-4 sm:px-8 py-8 overflow-hidden">
+        <div className="max-w-3xl mx-auto relative">
+          <BackButton />
+          <GlowBlob />
+
+          {/* Floating keyword bubbles around the blob */}
+          <div className="relative h-72 flex items-center justify-center mt-8">
+            {vibeKeywords.length === 0 && !vibeLoading && (
+              <h2 className="text-3xl sm:text-4xl font-bold text-center bg-gradient-to-r from-blue-300 via-orange-200 to-purple-300 bg-clip-text text-transparent relative z-10">
+                Choose Your Vibe
+              </h2>
+            )}
+
+            {vibeLoading && (
+              <div className="relative z-10 flex flex-col items-center gap-3">
+                <div className="h-10 w-10 border-3 border-white/30 border-t-orange-400 rounded-full animate-spin" />
+                <p className="text-white/60 text-sm">Finding your vibe...</p>
+              </div>
+            )}
+
+            {vibeKeywords.map((kw, i) => {
+              const angle = (2 * Math.PI * i) / Math.max(vibeKeywords.length, 1);
+              const radius = 110;
+              const x = Math.cos(angle) * radius;
+              const y = Math.sin(angle) * radius;
+              const duration = 5 + (i % 3);
+              return (
+                <button
+                  key={kw}
+                  onClick={() => removeKeyword(kw)}
+                  className="absolute z-20 bg-white/15 backdrop-blur-md text-white border border-white/30 rounded-full px-4 py-2 text-sm font-semibold shadow-[0_8px_24px_rgba(255,255,255,0.12)] hover:bg-red-500/30 hover:border-red-400/50 transition-all duration-300 animate-float"
+                  style={{
+                    left: `calc(50% + ${x}px - 40px)`,
+                    top: `calc(50% + ${y}px - 16px)`,
+                    animationDuration: `${duration}s`,
+                    animationDelay: `${i * 0.2}s`,
+                  }}
+                  title="Click to remove"
+                >
+                  {kw} <span className="ml-1 opacity-60">&times;</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Text input */}
+          <div className="max-w-md mx-auto mb-8 relative z-10">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={vibeInput}
+                onChange={(e) => setVibeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addKeyword(vibeInput);
+                  }
+                }}
+                placeholder="Type a vibe... (e.g. chill, beer party, bowling)"
+                className="flex-1 bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-white/40 focus:outline-none focus:border-orange-400/60 focus:ring-1 focus:ring-orange-400/30 transition"
+                disabled={vibeLoading}
+              />
+              <button
+                onClick={() => addKeyword(vibeInput)}
+                disabled={!vibeInput.trim() || vibeLoading}
+                className="bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl px-5 py-3 font-semibold transition"
+              >
+                Add
+              </button>
+            </div>
+            {vibeKeywords.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {vibeKeywords.map((kw) => (
+                  <span
+                    key={`chip-${kw}`}
+                    className="inline-flex items-center gap-1 bg-white/10 border border-white/20 rounded-full px-3 py-1 text-xs text-white/80"
+                  >
+                    {kw}
+                    <button onClick={() => removeKeyword(kw)} className="text-white/50 hover:text-red-400 transition">&times;</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Venue cards from orchestrator */}
+          {rankedVenues.length > 0 && !vibeLoading && (
+            <div className="relative z-10">
+              {currentVenue ? (
+                <div className="max-w-lg mx-auto bg-white border border-gray-200 rounded-3xl p-6 shadow-lg text-black">
+                  <div className="flex items-start justify-between mb-2">
+                    <h2 className="text-2xl font-bold">{currentVenue.name}</h2>
+                    <span className="bg-orange-100 text-orange-600 text-sm font-bold px-3 py-1 rounded-full">
+                      {Math.round((currentVenue.score || 0) * 100)}%
+                    </span>
+                  </div>
+                  {currentVenue.address && (
+                    <p className="text-gray-500 text-sm mb-2">{currentVenue.address}</p>
+                  )}
+                  {currentVenue.explanation && (
+                    <p className="text-gray-600 text-sm mb-3">{currentVenue.explanation}</p>
+                  )}
+                  {currentVenue.categories && currentVenue.categories.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {currentVenue.categories.map((cat: string) => (
+                        <span key={cat} className="bg-orange-50 text-orange-600 text-xs font-semibold px-3 py-1 rounded-full">
+                          {cat}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {currentVenue.price_tier && (
+                    <p className="text-sm text-gray-400 mb-3">Price: {currentVenue.price_tier}</p>
+                  )}
+                  <div className="flex gap-4 mt-4">
+                    <button
+                      onClick={() => handleVibeSwipe(currentVenue, "pass")}
+                      className="flex-1 border-2 border-gray-300 rounded-xl py-3 font-semibold text-gray-500 hover:bg-gray-100 transition"
+                    >
+                      Pass
+                    </button>
+                    <button
+                      onClick={() => handleVibeSwipe(currentVenue, "interested")}
+                      className="flex-1 bg-orange-500 text-white rounded-xl py-3 font-semibold hover:bg-orange-600 transition"
+                    >
+                      Interested
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 text-center mt-2">
+                    {vibeIndex + 1} / {rankedVenues.length}
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center text-white/50 mt-8">
+                  <p className="text-3xl mb-2">&#x2728;</p>
+                  <p>You&apos;ve seen all venues for this vibe!</p>
+                  <button
+                    onClick={() => {
+                      setVibeIndex(0);
+                      setOrchestratorResult(null);
+                      setVibeKeywords([]);
+                    }}
+                    className="mt-4 text-orange-300 font-medium hover:text-orange-200 transition"
+                  >
+                    Start fresh
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* No keywords yet prompt */}
+          {vibeKeywords.length === 0 && !vibeLoading && (
+            <p className="text-center text-white/30 text-sm mt-4">
+              Type keywords above and we&apos;ll find matching venues for you
+            </p>
+          )}
+        </div>
+
+        <style jsx>{`
+          .animate-pulse-slow { animation: pulseSlow 4s ease-in-out infinite; }
+          @keyframes pulseSlow {
+            0%, 100% { opacity: 0.7; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.08); }
+          }
+          .animate-float {
+            animation-name: floatY;
+            animation-iteration-count: infinite;
+            animation-timing-function: ease-in-out;
+          }
+          @keyframes floatY {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // ── CUSTOM PRESET ──────────────────────────────────────────────────
 
   const card = filteredFeed[index];
-  const maxCount = Math.max(1, ...Object.values(tagCounts));
+  const maxCount = Math.max(1, ...(Object.values(tagCounts) as number[]));
 
   return (
     <div className="min-h-[calc(100vh-80px)] -mx-4 sm:mx-0 rounded-3xl bg-[#04070F] text-white px-4 sm:px-8 py-8 overflow-hidden">
       <div className="max-w-3xl mx-auto relative">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="mx-auto mt-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(89,135,255,0.35)_0%,_rgba(255,149,0,0.25)_35%,_rgba(167,80,255,0.22)_60%,_rgba(0,0,0,0)_80%)] blur-2xl" />
-        </div>
-        <h1 className="text-4xl sm:text-5xl font-bold mb-6 text-center tracking-tight relative z-10">Discover Hangouts</h1>
+        <BackButton />
+        <GlowBlob />
+
+        <h1 className="text-4xl sm:text-5xl font-bold mb-6 text-center tracking-tight relative z-10 pt-6">
+          Custom Preset
+        </h1>
 
         {/* Suggested matches banner */}
         {matches.length > 0 && (
           <div className="mb-6 relative z-10">
             {matches.map((m) => (
               <div key={m.id} className="bg-green-50 border border-green-300 rounded-lg p-4 mb-2 text-black">
-                <p className="font-semibold text-green-800">Match found! ({m.member_user_ids.length} people, score: {m.score})</p>
+                <p className="font-semibold text-green-800">
+                  Match found! ({m.member_user_ids.length} people, score: {m.score})
+                </p>
                 <a
                   href={m.group_id ? `/plan?group_id=${m.group_id}` : "#"}
-                  onClick={!m.group_id ? async (e) => {
-                    e.preventDefault();
-                    await handleCreateGroup(m.id);
-                  } : undefined}
-                  className="mt-2 inline-block bg-green-600 text-white rounded-lg px-4 py-2 font-semibold hover:bg-green-700 disabled:opacity-50"
+                  onClick={
+                    !m.group_id
+                      ? async (e: React.MouseEvent) => {
+                          e.preventDefault();
+                          await handleCreateGroup(m.id);
+                        }
+                      : undefined
+                  }
+                  className="mt-2 inline-block bg-green-600 text-white rounded-lg px-4 py-2 font-semibold hover:bg-green-700"
                 >
-                  {creating ? "Creating group…" : "🗓 Plan this outing"}
+                  {creating ? "Creating group\u2026" : "\uD83D\uDCC5 Plan this outing"}
                 </a>
               </div>
             ))}
@@ -130,55 +488,56 @@ export default function SwipePage() {
         {/* Bubble tag filters */}
         {allTags.length > 0 && (
           <>
-            <p className="text-sm text-[#f1b9bf] text-center mb-2 relative z-10">Describe a vibe or pick suggestions</p>
+            <p className="text-sm text-[#f1b9bf] text-center mb-2 relative z-10">
+              Pick tags to filter hangouts
+            </p>
             <div className="relative h-72 rounded-3xl border border-white/10 bg-black/35 overflow-hidden mb-6 backdrop-blur-sm">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(111,165,255,0.22)_0%,_rgba(255,181,83,0.15)_30%,_rgba(176,104,255,0.14)_55%,_rgba(0,0,0,0)_75%)]" />
-            {allTags.map((tag, i) => {
-              const isActive = selectedTags.includes(tag);
-              const freq = tagCounts[tag] || 1;
-              const size = 68 + Math.floor((52 * freq) / maxCount);
-              const col = i % 5;
-              const row = Math.floor(i / 5);
-              const baseLeft = 4 + col * 19;
-              const baseTop = 10 + row * 23;
-              const left = Math.max(2, Math.min(86, isActive ? 34 + (i % 3) * 12 : baseLeft));
-              const top = Math.max(4, Math.min(72, isActive ? 24 + (i % 4) * 10 : baseTop));
-              const duration = 4 + (i % 5);
-              const delay = (i % 3) * 0.3;
-              return (
-                <button
-                  key={tag}
-                  onClick={() =>
-                    setSelectedTags((prev) =>
-                      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
-                    )
-                  }
-                  className={`absolute rounded-full text-xs font-semibold px-2 text-center transition-all duration-500 ease-out animate-float ${
-                    isActive
-                      ? "bg-white/20 text-white border border-white/40 shadow-[0_10px_30px_rgba(255,255,255,0.2)] scale-110 z-20"
-                      : "bg-white/5 text-white/80 border border-white/15 opacity-80 hover:opacity-100"
-                  }`}
-                  style={
-                    {
-                      width: `${size}px`,
-                      height: `${size}px`,
-                      left: `${left}%`,
-                      top: `${top}%`,
-                      animationDuration: `${duration}s`,
-                      animationDelay: `${delay}s`,
-                    } as React.CSSProperties
-                  }
-                >
-                  {tag}
-                </button>
-              );
-            })}
+              {allTags.map((tag, i) => {
+                const isActive = selectedTags.includes(tag);
+                const freq = tagCounts[tag] || 1;
+                const size = 68 + Math.floor((52 * freq) / maxCount);
+                const col = i % 5;
+                const row = Math.floor(i / 5);
+                const baseLeft = 4 + col * 19;
+                const baseTop = 10 + row * 23;
+                const left = Math.max(2, Math.min(86, isActive ? 34 + (i % 3) * 12 : baseLeft));
+                const top = Math.max(4, Math.min(72, isActive ? 24 + (i % 4) * 10 : baseTop));
+                const duration = 4 + (i % 5);
+                const delay = (i % 3) * 0.3;
+                return (
+                  <button
+                    key={tag}
+                    onClick={() =>
+                      setSelectedTags((prev) =>
+                        prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+                      )
+                    }
+                    className={`absolute rounded-full text-xs font-semibold px-2 text-center transition-all duration-500 ease-out animate-float ${
+                      isActive
+                        ? "bg-white/20 text-white border border-white/40 shadow-[0_10px_30px_rgba(255,255,255,0.2)] scale-110 z-20"
+                        : "bg-white/5 text-white/80 border border-white/15 opacity-80 hover:opacity-100"
+                    }`}
+                    style={
+                      {
+                        width: `${size}px`,
+                        height: `${size}px`,
+                        left: `${left}%`,
+                        top: `${top}%`,
+                        animationDuration: `${duration}s`,
+                        animationDelay: `${delay}s`,
+                      } as React.CSSProperties
+                    }
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
             </div>
 
             <div className="mb-8">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-white/80 font-semibold">Suggestions</p>
-                <button className="text-yellow-300 font-semibold text-sm">Show More</button>
               </div>
               <div className="flex flex-wrap gap-2">
                 {allTags.map((tag) => {
@@ -208,16 +567,19 @@ export default function SwipePage() {
 
         {/* Swipe card */}
         {card ? (
-          <div className="max-w-2xl mx-auto bg-white border border-gray-200 rounded-3xl p-6 shadow-sm text-black">
-            <h2 className="text-4xl font-bold mb-2">{card.title}</h2>
-            {card.description && <p className="text-gray-700 text-xl mb-3">{card.description}</p>}
+          <div className="max-w-lg mx-auto bg-white border border-gray-200 rounded-3xl p-6 shadow-sm text-black relative z-10">
+            <h2 className="text-2xl font-bold mb-2">{card.title}</h2>
+            {card.description && <p className="text-gray-600 mb-3">{card.description}</p>}
             {card.location_area && (
-              <p className="text-3xl font-semibold text-gray-500 mb-3">{card.location_area}</p>
+              <p className="text-sm text-gray-500 mb-2">{card.location_area}</p>
             )}
             {card.tags.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-4">
                 {card.tags.map((tag) => (
-                  <span key={tag} className="bg-orange-50 text-orange-600 text-base font-semibold px-4 py-1 rounded-full">
+                  <span
+                    key={tag}
+                    className="bg-orange-50 text-orange-600 text-xs font-semibold px-3 py-1 rounded-full"
+                  >
                     {tag}
                   </span>
                 ))}
@@ -226,22 +588,22 @@ export default function SwipePage() {
             <div className="flex gap-4 mt-4">
               <button
                 onClick={() => handleSwipe("pass")}
-                className="flex-1 border-2 border-gray-300 rounded-xl py-3 text-4xl font-semibold text-gray-500 hover:bg-gray-100"
+                className="flex-1 border-2 border-gray-300 rounded-xl py-3 font-semibold text-gray-500 hover:bg-gray-100 transition"
               >
                 Pass
               </button>
               <button
                 onClick={() => handleSwipe("interested")}
-                className="flex-1 bg-orange-500 text-white rounded-xl py-3 text-4xl font-semibold hover:bg-orange-600"
+                className="flex-1 bg-orange-500 text-white rounded-xl py-3 font-semibold hover:bg-orange-600 transition"
               >
                 Interested
               </button>
             </div>
-            <p className="text-sm text-gray-400 text-center mt-2">or use arrow keys</p>
+            <p className="text-xs text-gray-400 text-center mt-2">or use arrow keys</p>
           </div>
         ) : (
-          <div className="text-center text-gray-300 mt-12">
-            <p className="text-4xl mb-2">{selectedTags.length ? "🔎" : "✨"}</p>
+          <div className="text-center text-white/50 mt-12 relative z-10">
+            <p className="text-4xl mb-2">{selectedTags.length ? "\uD83D\uDD0E" : "\u2728"}</p>
             <p>
               {selectedTags.length
                 ? "No hangouts match these filters."
@@ -250,36 +612,44 @@ export default function SwipePage() {
             {selectedTags.length ? (
               <button
                 onClick={() => setSelectedTags([])}
-                className="mt-4 text-orange-300 font-medium hover:text-orange-200"
+                className="mt-4 text-orange-300 font-medium hover:text-orange-200 transition"
               >
                 Clear filters
               </button>
             ) : (
-              <button onClick={loadFeed} className="mt-4 text-orange-300 font-medium hover:text-orange-200">Refresh feed</button>
+              <button
+                onClick={loadFeed}
+                className="mt-4 text-orange-300 font-medium hover:text-orange-200 transition"
+              >
+                Refresh feed
+              </button>
             )}
           </div>
         )}
 
-        <p className="text-2xl text-white/70 text-center mt-8">
-          {filteredFeed.length > 0 && index < filteredFeed.length ? `${index + 1} / ${filteredFeed.length}` : ""}
+        <p className="text-sm text-white/40 text-center mt-6 relative z-10">
+          {filteredFeed.length > 0 && index < filteredFeed.length
+            ? `${index + 1} / ${filteredFeed.length}`
+            : ""}
         </p>
-
-        <style jsx>{`
-          .animate-float {
-            animation-name: floatY;
-            animation-iteration-count: infinite;
-            animation-timing-function: ease-in-out;
-          }
-          @keyframes floatY {
-            0%, 100% {
-              transform: translateY(0);
-            }
-            50% {
-              transform: translateY(-10px);
-            }
-          }
-        `}</style>
       </div>
+
+      <style jsx>{`
+        .animate-pulse-slow { animation: pulseSlow 4s ease-in-out infinite; }
+        @keyframes pulseSlow {
+          0%, 100% { opacity: 0.7; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.08); }
+        }
+        .animate-float {
+          animation-name: floatY;
+          animation-iteration-count: infinite;
+          animation-timing-function: ease-in-out;
+        }
+        @keyframes floatY {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-10px); }
+        }
+      `}</style>
     </div>
   );
 }
