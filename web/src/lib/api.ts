@@ -371,6 +371,13 @@ export const presets = {
     is_favorite?: boolean;
   }) =>
     request<Preset>("/presets", { method: "POST", body: JSON.stringify(data) }),
+  update: (presetId: string, data: {
+    name: string;
+    description?: string;
+    source?: "manual" | "ai";
+    criteria: PresetCriteria;
+  }) =>
+    request<Preset>(`/presets/${presetId}`, { method: "PATCH", body: JSON.stringify(data) }),
   setFavorite: (presetId: string, isFavorite: boolean) =>
     request<Preset>(`/presets/${presetId}/favorite`, {
       method: "PATCH",

@@ -1,41 +1,16 @@
 "use client";
 
 import { useAuth } from "@/lib/auth-context";
-import { presets as presetsApi } from "@/lib/api";
-import { useRouter } from "next/navigation";
+import { Preset, presets as presetsApi } from "@/lib/api";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
-
-const CUISINES = ["Italian", "Japanese", "Mexican", "Indian", "Thai", "American", "Mediterranean", "Korean"];
-const ACTIVITIES = ["Bowling", "Hiking", "Karaoke", "Brunch", "Museum", "Comedy", "Board Games", "Live Music"];
-const DIETARY = ["Vegetarian", "Vegan", "Gluten Free", "Halal", "Kosher", "Dairy Free"];
-const BUDGET_OPTIONS = ["$", "$$", "$$$", "$$$$"];
-
-function Toggle({ options, value, onChange }: { options: string[]; value: string[]; onChange: (v: string[]) => void }) {
-  const toggle = (opt: string) => {
-    if (value.includes(opt)) onChange(value.filter((v) => v !== opt));
-    else onChange([...value, opt]);
-  };
-  return (
-    <div className="flex flex-wrap gap-2">
-      {options.map((opt) => (
-        <button
-          key={opt}
-          type="button"
-          onClick={() => toggle(opt)}
-          className={`px-3 py-1.5 rounded-full text-sm border font-medium transition-colors ${value.includes(opt)
-            ? "border-orange-400 bg-orange-50 text-orange-900 dark:bg-orange-950/45 dark:text-orange-100"
-            : "border-[var(--border)] text-[var(--text)] hover:border-orange-300"}`}
-        >
-          {opt}
-        </button>
-      ))}
-    </div>
-  );
-}
+import { criteriaToForm, formToCriteria, PresetEditor } from "../_components/preset-form";
 
 export default function ManualPresetPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const presetId = searchParams.get("preset_id");
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -44,31 +19,66 @@ export default function ManualPresetPage() {
   const [dietary, setDietary] = useState<string[]>([]);
   const [budget, setBudget] = useState("$$");
   const [dealbreakers, setDealbreakers] = useState("");
+  const [neighborhoods, setNeighborhoods] = useState("");
+  const [accessibility, setAccessibility] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loadingPreset, setLoadingPreset] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [loading, user, router]);
 
-  const onSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (!user || !presetId) return;
+    setLoadingPreset(true);
+    presetsApi.list()
+      .then((all) => {
+        const preset = all.find((item) => item.id === presetId && !item.is_built_in) as Preset | undefined;
+        if (!preset) return;
+        setName(preset.name);
+        setDescription(preset.description || "");
+        const form = criteriaToForm(preset.criteria);
+        setCuisines(form.cuisines);
+        setActivities(form.activities);
+        setDietary(form.dietary);
+        setBudget(form.budget);
+        setDealbreakers(form.dealbreakers);
+        setNeighborhoods(form.neighborhoods);
+        setAccessibility(form.accessibility);
+      })
+      .finally(() => setLoadingPreset(false));
+  }, [presetId, user]);
+
+  const onSubmit = async (event: FormEvent) => {
+    event.preventDefault();
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await presetsApi.create({
-        name,
-        description,
-        source: "manual",
-        criteria: {
-          cuisine_preferences: cuisines.map((c) => c.toLowerCase()),
-          activity_preferences: activities.map((a) => a.toLowerCase()),
-          dietary_restrictions: dietary.map((d) => d.toLowerCase().replace(/ /g, "_")),
-          budget_max: budget,
-          dealbreakers: dealbreakers.split("\n").map((d) => d.trim()).filter(Boolean),
-          preferred_neighborhoods: [],
-          accessibility_needs: [],
-        },
+      const criteria = formToCriteria({
+        cuisines,
+        activities,
+        dietary,
+        budget,
+        dealbreakers,
+        neighborhoods,
+        accessibility,
       });
+
+      if (presetId) {
+        await presetsApi.update(presetId, {
+          name,
+          description,
+          source: "manual",
+          criteria,
+        });
+      } else {
+        await presetsApi.create({
+          name,
+          description,
+          source: "manual",
+          criteria,
+        });
+      }
       router.push("/discover/presets");
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to save preset");
@@ -77,69 +87,45 @@ export default function ManualPresetPage() {
     }
   };
 
-  if (loading) return <p className="text-center mt-20 text-[var(--text)]">Loading...</p>;
+  if (loading || loadingPreset) return <p className="mt-20 text-center text-[var(--text)]">Loading...</p>;
   if (!user) return null;
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <h1 className="text-3xl font-bold text-[var(--text)] mb-2">Build preset manually</h1>
-      <p className="text-[var(--text-muted)] mb-6">Set cuisines, activities, dietary preferences, budget, and dealbreakers — just like outing preferences.</p>
+    <div className="mx-auto max-w-6xl">
+      <h1 className="mb-2 text-3xl font-bold text-[var(--text)]">
+        {presetId ? "Edit preset" : "Build preset manually"}
+      </h1>
+      <p className="mb-6 text-[var(--text-muted)]">
+        Shape the preset directly, then save it when it feels right.
+      </p>
 
-      <form onSubmit={onSubmit} className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 space-y-5">
-        <div>
-          <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Preset name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} required className="w-full border border-[var(--border)] rounded-lg px-3 py-2 bg-transparent" />
-        </div>
+      <form onSubmit={onSubmit} className="space-y-5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
+        <PresetEditor
+          name={name}
+          description={description}
+          onNameChange={setName}
+          onDescriptionChange={setDescription}
+          cuisines={cuisines}
+          activities={activities}
+          dietary={dietary}
+          budget={budget}
+          dealbreakers={dealbreakers}
+          neighborhoods={neighborhoods}
+          accessibility={accessibility}
+          onCuisinesChange={setCuisines}
+          onActivitiesChange={setActivities}
+          onDietaryChange={setDietary}
+          onBudgetChange={setBudget}
+          onDealbreakersChange={setDealbreakers}
+          onNeighborhoodsChange={setNeighborhoods}
+          onAccessibilityChange={setAccessibility}
+        />
 
-        <div>
-          <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Description</label>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="w-full border border-[var(--border)] rounded-lg px-3 py-2 bg-transparent" />
-        </div>
-
-        <div>
-          <p className="text-sm font-medium text-[var(--text-muted)] mb-2">Cuisines</p>
-          <Toggle options={CUISINES} value={cuisines} onChange={setCuisines} />
-        </div>
-        <div>
-          <p className="text-sm font-medium text-[var(--text-muted)] mb-2">Activities</p>
-          <Toggle options={ACTIVITIES} value={activities} onChange={setActivities} />
-        </div>
-        <div>
-          <p className="text-sm font-medium text-[var(--text-muted)] mb-2">Dietary restrictions</p>
-          <Toggle options={DIETARY} value={dietary} onChange={setDietary} />
-        </div>
-
-        <div>
-          <p className="text-sm font-medium text-[var(--text-muted)] mb-2">Budget per person</p>
-          <div className="grid grid-cols-2 gap-2">
-            {BUDGET_OPTIONS.map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setBudget(opt)}
-                className={`py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${budget === opt
-                  ? "border-orange-400 bg-orange-50 text-orange-900 dark:bg-orange-950/45 dark:text-orange-100"
-                  : "border-[var(--border)] text-[var(--text)] hover:border-orange-300"}`}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <p className="text-sm font-medium text-[var(--text-muted)] mb-1">Dealbreakers (one per line)</p>
-          <textarea
-            value={dealbreakers}
-            onChange={(e) => setDealbreakers(e.target.value)}
-            rows={3}
-            placeholder={"No loud places\nMust have parking"}
-            className="w-full border border-[var(--border)] rounded-lg px-3 py-2 bg-transparent"
-          />
-        </div>
-
-        <button disabled={saving} className="bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold hover:bg-orange-600 disabled:opacity-50">
-          {saving ? "Saving..." : "Save preset"}
+        <button
+          disabled={saving}
+          className="rounded-lg bg-orange-500 px-4 py-2 font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+        >
+          {saving ? "Saving..." : presetId ? "Save changes" : "Save preset"}
         </button>
       </form>
     </div>

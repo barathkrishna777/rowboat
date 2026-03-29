@@ -61,6 +61,14 @@ function PresetCard({
         </div>
 
         <div className="flex items-center gap-3 xl:flex-col xl:items-end">
+          {!preset.is_built_in && (
+            <a
+              href={`/discover/create/manual?preset_id=${encodeURIComponent(preset.id)}`}
+              className="inline-flex rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold text-[var(--text)] transition hover:border-orange-300 hover:text-orange-700 dark:hover:border-orange-400/35 dark:hover:text-orange-200"
+            >
+              Edit
+            </a>
+          )}
           <a
             href={`/swipe?preset_id=${encodeURIComponent(preset.id)}`}
             className="inline-flex rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600"

@@ -43,6 +43,13 @@ class PresetCreate(BaseModel):
     is_favorite: bool = False
 
 
+class PresetUpdate(BaseModel):
+    name: str
+    description: str | None = None
+    source: PresetSource = PresetSource.MANUAL
+    criteria: PresetCriteria = Field(default_factory=PresetCriteria)
+
+
 class PresetFavoriteUpdate(BaseModel):
     is_favorite: bool
 

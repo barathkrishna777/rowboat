@@ -20,6 +20,7 @@ from src.models.preset import (
     PresetParseRequest,
     PresetParseResponse,
     PresetSource,
+    PresetUpdate,
 )
 from src.models.user import User
 from src.presets.agent import parse_natural_language_preset
@@ -84,6 +85,37 @@ async def create_preset(
     await session.commit()
     await session.refresh(row)
     return _row_to_preset(row)
+
+
+@router.patch("/{preset_id}", response_model=Preset)
+async def update_preset(
+    preset_id: str,
+    body: PresetUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    row = await session.get(PresetTable, preset_id)
+    if not row or row.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Preset not found")
+
+    if row.source == PresetSource.BUILT_IN.value:
+        raise HTTPException(status_code=400, detail="Built-in presets cannot be edited")
+
+    row.name = body.name
+    row.description = body.description
+    row.source = body.source.value
+    row.criteria = body.criteria.model_dump_json()
+
+    await session.commit()
+    await session.refresh(row)
+
+    favorite = (await session.execute(
+        select(PresetFavoriteTable).where(
+            PresetFavoriteTable.user_id == current_user.id,
+            PresetFavoriteTable.preset_id == preset_id,
+        )
+    )).scalar_one_or_none()
+    return _row_to_preset(row, is_favorite=bool(favorite))
 
 
 @router.patch("/{preset_id}/favorite", response_model=Preset)
