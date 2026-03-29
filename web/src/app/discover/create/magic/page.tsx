@@ -93,11 +93,11 @@ export default function MagicPresetPage() {
           </div>
 
           <div className="text-sm text-[var(--text-muted)] space-y-1">
-            <p><strong>Activities:</strong> {criteria.activity_preferences.join(", ") || "-"}</p>
-            <p><strong>Cuisines:</strong> {criteria.cuisine_preferences.join(", ") || "-"}</p>
-            <p><strong>Dietary:</strong> {criteria.dietary_restrictions.join(", ") || "-"}</p>
-            <p><strong>Budget:</strong> {criteria.budget_max || "-"}</p>
-            <p><strong>Dealbreakers:</strong> {criteria.dealbreakers.join(", ") || "-"}</p>
+            <p><strong>Activities:</strong> {criteria.activity_preferences.join(", ") || "—"}</p>
+            <p><strong>Cuisines:</strong> {criteria.cuisine_preferences.join(", ") || "—"}</p>
+            <p><strong>Dietary:</strong> {criteria.dietary_restrictions.join(", ") || "—"}</p>
+            <p><strong>Budget:</strong> {criteria.budget_max || "—"}</p>
+            <p><strong>Dealbreakers:</strong> {criteria.dealbreakers.join(", ") || "—"}</p>
           </div>
 
           <button disabled={saving} className="bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold hover:bg-orange-600 disabled:opacity-50">

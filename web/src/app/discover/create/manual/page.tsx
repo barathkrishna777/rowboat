@@ -83,7 +83,7 @@ export default function ManualPresetPage() {
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-3xl font-bold text-[var(--text)] mb-2">Build preset manually</h1>
-      <p className="text-[var(--text-muted)] mb-6">Set cuisines, activities, dietary preferences, budget, and dealbreakers - just like outing preferences.</p>
+      <p className="text-[var(--text-muted)] mb-6">Set cuisines, activities, dietary preferences, budget, and dealbreakers — just like outing preferences.</p>
 
       <form onSubmit={onSubmit} className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 space-y-5">
         <div>
