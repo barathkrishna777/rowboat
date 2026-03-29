@@ -122,5 +122,5 @@ async def parse_preset(
     body: PresetParseRequest,
     current_user: User = Depends(get_current_user),
 ):
-    _ = current_user
+    _ = current_user  # authenticated endpoint by design
     return parse_natural_language_preset(body.text)
