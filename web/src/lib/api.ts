@@ -268,7 +268,7 @@ export const plans = {
       const venue = (item as Record<string, unknown>).venue as Record<string, unknown> | undefined;
       if (!venue || typeof venue !== "object") return item as ScoredVenue;
       const { venue: _venue, ...rest } = item as Record<string, unknown>;
-      return { ...venue, ...rest } as ScoredVenue;
+      return { ...venue, ...rest } as unknown as ScoredVenue;
     };
 
     raw.ranked_venues = (raw.ranked_venues || []).map(flattenVenue);
