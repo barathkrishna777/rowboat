@@ -4,7 +4,15 @@
       "WebSearch",
       "Bash(for dir:*)",
       "Bash(do touch:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git checkout:*)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''src/ui/app.py''\\).read\\(\\)\\); print\\(''Syntax OK''\\)\")",
+      "Bash(python -m pytest tests/ -x -q --timeout=30)",
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(python -m pytest tests/test_models.py tests/test_constraints.py tests/test_orchestrator.py tests/test_config_status.py tests/test_scorer.py -x -q)",
+      "Bash(python -m pytest tests/test_models.py tests/test_constraints.py tests/test_config_status.py tests/test_scorer.py -q)",
+      "Bash(python -m pytest tests/test_models.py tests/test_constraints.py tests/test_scorer.py -q)"
     ]
   }
 }
