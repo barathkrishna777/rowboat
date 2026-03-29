@@ -16,7 +16,7 @@ function MethodCard({
   recommended?: boolean;
 }) {
   return (
-    <a href={href} className="block bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 shadow-sm hover:border-orange-400 transition-colors">
+    <a href={href} className="block border-t border-[var(--border)] py-6 transition-colors hover:border-orange-400">
       {recommended && (
         <p className="text-xs font-semibold uppercase tracking-wide text-orange-500 mb-2">Recommended</p>
       )}
@@ -38,13 +38,13 @@ export default function CreatePresetChooserPage() {
   if (!user) return null;
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="mx-auto max-w-6xl px-2 sm:px-4">
       <h1 className="text-3xl font-bold text-[var(--text)] mb-2">Create preset</h1>
       <p className="text-[var(--text-muted)] mb-8">
         Choose how you want to build your preset. Both manual and natural-language creation are now available.
       </p>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-0 md:grid-cols-2 md:gap-8">
         <MethodCard
           title="Build manually"
           description="Pick activities, cuisine, and other options one by one."

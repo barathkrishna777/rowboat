@@ -20,7 +20,7 @@ function DiscoveryCard({
   return (
     <a
       href={href}
-      className="group rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_12px_40px_rgba(15,23,42,0.08)] transition hover:-translate-y-0.5 hover:border-orange-300 dark:shadow-[0_18px_60px_rgba(2,6,23,0.35)] dark:hover:border-orange-500/40"
+      className="group border-t border-[var(--border)] py-6 transition hover:border-orange-300"
     >
       <div className="flex h-full flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-start gap-4">
@@ -57,7 +57,7 @@ export default function DiscoverHomePage() {
   return (
     <div className="-mx-4 -my-8 px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
-        <section className="relative overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface)] px-5 py-6 shadow-[0_14px_48px_rgba(15,23,42,0.08)] dark:shadow-[0_22px_72px_rgba(2,6,23,0.35)] sm:px-8">
+        <section className="relative overflow-hidden px-2 py-4 sm:px-4">
           <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-r from-orange-200/45 via-sky-100/55 to-emerald-100/35 blur-3xl dark:from-orange-500/12 dark:via-sky-500/10 dark:to-emerald-500/8" />
 
           <div className="relative grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] lg:items-start">
@@ -73,7 +73,7 @@ export default function DiscoverHomePage() {
               </p>
             </div>
 
-            <div className="grid gap-4">
+            <div className="grid gap-0">
               <DiscoveryCard
                 eyebrow="Mood-first"
                 title="Choose your vibe"

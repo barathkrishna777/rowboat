@@ -82,13 +82,13 @@ export default function MagicPresetPage() {
   if (!user) return null;
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-6xl px-2 sm:px-4">
       <h1 className="mb-2 text-3xl font-bold text-[var(--text)]">Describe it naturally</h1>
       <p className="mb-6 text-[var(--text-muted)]">
         Let the agent draft the preset, then edit anything before you save it.
       </p>
 
-      <div className="mb-6 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
+      <div className="mb-6 border-t border-[var(--border)] pt-6">
         <label className="mb-1 block text-sm font-medium text-[var(--text-muted)]">Your prompt</label>
         <textarea
           value={prompt}
@@ -107,7 +107,7 @@ export default function MagicPresetPage() {
       </div>
 
       {parsed && (
-        <form onSubmit={save} className="space-y-5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
+        <form onSubmit={save} className="space-y-5 border-t border-[var(--border)] pt-6">
           <h2 className="text-xl font-bold text-[var(--text)]">Edit before saving</h2>
 
           <PresetEditor

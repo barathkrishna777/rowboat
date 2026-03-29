@@ -91,7 +91,7 @@ function ManualPresetPageInner() {
   if (!user) return null;
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-6xl px-2 sm:px-4">
       <h1 className="mb-2 text-3xl font-bold text-[var(--text)]">
         {presetId ? "Edit preset" : "Build preset manually"}
       </h1>
@@ -99,7 +99,7 @@ function ManualPresetPageInner() {
         Shape the preset directly, then save it when it feels right.
       </p>
 
-      <form onSubmit={onSubmit} className="space-y-5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
+      <form onSubmit={onSubmit} className="space-y-5 border-t border-[var(--border)] pt-6">
         <PresetEditor
           name={name}
           description={description}

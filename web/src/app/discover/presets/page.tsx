@@ -20,7 +20,7 @@ function PresetCard({
   ].slice(0, 4);
 
   return (
-    <div className="rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_12px_36px_rgba(15,23,42,0.07)] dark:shadow-[0_18px_48px_rgba(2,6,23,0.28)]">
+    <div className="border-t border-[var(--border)] py-5">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0 flex-1">
           <div className="mb-3 flex items-start justify-between gap-3">
@@ -115,7 +115,7 @@ export default function PresetsPage() {
   return (
     <div className="-mx-4 -my-8 px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl space-y-6">
-        <section className="relative overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface)] px-5 py-6 shadow-[0_14px_48px_rgba(15,23,42,0.08)] dark:shadow-[0_22px_72px_rgba(2,6,23,0.35)] sm:px-8">
+        <section className="relative overflow-hidden px-2 py-4 sm:px-4">
           <div className="absolute inset-x-0 top-0 h-36 bg-gradient-to-r from-sky-200/45 via-orange-100/55 to-emerald-100/35 blur-3xl dark:from-sky-500/10 dark:via-orange-500/10 dark:to-emerald-500/8" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -143,7 +143,7 @@ export default function PresetsPage() {
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.22em] text-[var(--text-muted)]">
               Favorites
             </h2>
-            <div className="grid gap-4">
+            <div className="grid gap-0">
               {favorites.map((preset) => (
                 <PresetCard
                   key={preset.id}
@@ -161,11 +161,11 @@ export default function PresetsPage() {
             All presets
           </h2>
           {regular.length === 0 ? (
-            <div className="rounded-[1.5rem] border border-dashed border-[var(--border)] bg-[var(--surface)] p-6 text-sm text-[var(--text-muted)]">
+            <div className="border-t border-dashed border-[var(--border)] py-6 text-sm text-[var(--text-muted)]">
               No extra presets yet.
             </div>
           ) : (
-            <div className="grid gap-4">
+            <div className="grid gap-0">
               {regular.map((preset) => (
                 <PresetCard
                   key={preset.id}
