@@ -216,7 +216,7 @@ export default function SwipePage() {
 
   if (mode === "landing") {
     return (
-      <div className="min-h-[calc(100vh-80px)] -mx-4 sm:mx-0 rounded-3xl bg-[#04070F] text-white px-4 sm:px-8 py-12 overflow-hidden">
+      <div className="min-h-[calc(100vh-80px)] -mx-4 -my-8 bg-[#04070F] text-white px-4 sm:px-8 py-12 overflow-hidden">
         <div className="max-w-3xl mx-auto relative">
           <GlowBlob size="h-80 w-80" />
 
@@ -273,7 +273,7 @@ export default function SwipePage() {
     );
 
     return (
-      <div className="min-h-[calc(100vh-80px)] -mx-4 sm:mx-0 rounded-3xl bg-[#04070F] text-white px-4 sm:px-6 lg:px-10 py-6 overflow-hidden flex flex-col">
+      <div className="min-h-[calc(100vh-80px)] -mx-4 -my-8 bg-[#04070F] text-white px-4 sm:px-6 lg:px-10 py-6 overflow-hidden flex flex-col">
         <div className="w-full max-w-[1400px] mx-auto relative flex-1 flex flex-col">
           <BackButton />
 
@@ -558,7 +558,7 @@ export default function SwipePage() {
   const maxCount = Math.max(1, ...(Object.values(tagCounts) as number[]));
 
   return (
-    <div className="min-h-[calc(100vh-80px)] -mx-4 sm:mx-0 rounded-3xl bg-[#04070F] text-white px-4 sm:px-8 py-8 overflow-hidden">
+    <div className="min-h-[calc(100vh-80px)] -mx-4 -my-8 bg-[#04070F] text-white px-4 sm:px-8 py-8 overflow-hidden">
       <div className="max-w-3xl mx-auto relative">
         <BackButton />
         <GlowBlob />

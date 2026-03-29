@@ -25,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <DarkModeToggle />
               </div>
             </nav>
-            <main className="max-w-2xl mx-auto px-4 py-8">{children}</main>
+            <main className="mx-auto px-4 py-8">{children}</main>
           </AuthProvider>
         </DarkModeProvider>
       </body>
