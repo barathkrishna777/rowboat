@@ -30,3 +30,11 @@ Thumbs.db
 token.json
 credentials.json
 *.pptx
+
+# Cursor and Claude
+.cursor/
+.claude/settings.local.json
+
+
+# Misc
+bootstrap_local.sh
