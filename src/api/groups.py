@@ -52,7 +52,7 @@ async def _get_or_create_user(session: AsyncSession, name: str, email: str) -> U
     return row
 
 
-@router.post("/", response_model=Group)
+@router.post("", response_model=Group)
 async def create_group(request: CreateGroupRequest, session: AsyncSession = Depends(get_session)):
     """Create a new outing group, persisted to the database."""
     user_row = await _get_or_create_user(session, request.creator_name, request.creator_email)
