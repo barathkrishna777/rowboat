@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { hangouts as hangoutsApi, Hangout, SuggestedMatch } from "@/lib/api";
 import { useRouter } from "next/navigation";
@@ -10,6 +10,7 @@ export default function SwipePage() {
   const router = useRouter();
   const [feed, setFeed] = useState<Hangout[]>([]);
   const [index, setIndex] = useState(0);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [matches, setMatches] = useState<SuggestedMatch[]>([]);
   const [creating, setCreating] = useState(false);
 
@@ -26,8 +27,31 @@ export default function SwipePage() {
     if (user) loadFeed();
   }, [loading, user, router, loadFeed]);
 
+  const { allTags, tagCounts } = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of feed) {
+      for (const tag of item.tags || []) {
+        counts[tag] = (counts[tag] || 0) + 1;
+      }
+    }
+    return {
+      allTags: Object.keys(counts).sort((a, b) => a.localeCompare(b)),
+      tagCounts: counts,
+    };
+  }, [feed]);
+
+  const filteredFeed = useMemo(() => {
+    if (!selectedTags.length) return feed;
+    const selectedSet = new Set(selectedTags);
+    return feed.filter((item) => item.tags.some((tag) => selectedSet.has(tag)));
+  }, [feed, selectedTags]);
+
+  useEffect(() => {
+    setIndex(0);
+  }, [selectedTags, feed.length]);
+
   const handleSwipe = async (action: "pass" | "interested") => {
-    const card = feed[index];
+    const card = filteredFeed[index];
     if (!card) return;
     await hangoutsApi.swipe(card.id, action);
 
@@ -71,7 +95,8 @@ export default function SwipePage() {
 
   if (loading || !user) return <p className="text-center mt-20">Loading...</p>;
 
-  const card = feed[index];
+  const card = filteredFeed[index];
+  const maxCount = Math.max(1, ...Object.values(tagCounts));
 
   return (
     <div className="max-w-md mx-auto">
@@ -96,6 +121,78 @@ export default function SwipePage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Bubble tag filters */}
+      {allTags.length > 0 && (
+        <>
+          <p className="text-sm text-gray-500 mb-2">Pick your vibe</p>
+          <div className="relative h-64 rounded-2xl border border-gray-200 bg-gradient-to-br from-slate-50 via-white to-orange-50 overflow-hidden mb-4">
+            {allTags.map((tag, i) => {
+              const isActive = selectedTags.includes(tag);
+              const freq = tagCounts[tag] || 1;
+              const size = 70 + Math.floor((60 * freq) / maxCount);
+              const col = i % 4;
+              const row = Math.floor(i / 4);
+              const baseLeft = 8 + col * 22;
+              const baseTop = 8 + row * 24;
+              const left = Math.max(3, Math.min(84, isActive ? 36 + (i % 3) * 10 : baseLeft));
+              const top = Math.max(3, Math.min(72, isActive ? 22 + (i % 4) * 11 : baseTop));
+              const duration = 4 + (i % 5);
+              const delay = (i % 3) * 0.3;
+              return (
+                <button
+                  key={tag}
+                  onClick={() =>
+                    setSelectedTags((prev) =>
+                      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+                    )
+                  }
+                  className={`absolute rounded-full text-xs font-semibold px-2 text-center transition-all duration-500 ease-out animate-float ${
+                    isActive
+                      ? "bg-orange-500 text-white border-2 border-orange-500 shadow-[0_8px_24px_rgba(249,115,22,0.35)] scale-110 z-20"
+                      : "bg-white text-gray-500 border-2 border-gray-200 opacity-60 hover:opacity-100"
+                  }`}
+                  style={
+                    {
+                      width: `${size}px`,
+                      height: `${size}px`,
+                      left: `${left}%`,
+                      top: `${top}%`,
+                      animationDuration: `${duration}s`,
+                      animationDelay: `${delay}s`,
+                    } as React.CSSProperties
+                  }
+                >
+                  {tag}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-wrap gap-2 mb-4">
+            {allTags.map((tag) => {
+              const active = selectedTags.includes(tag);
+              return (
+                <button
+                  key={`chip-${tag}`}
+                  onClick={() =>
+                    setSelectedTags((prev) =>
+                      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+                    )
+                  }
+                  className={`rounded-full px-3 py-1 text-xs font-semibold border ${
+                    active
+                      ? "bg-orange-500 text-white border-orange-500"
+                      : "bg-white text-gray-500 border-gray-200 hover:border-orange-300"
+                  }`}
+                >
+                  {tag}
+                </button>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* Swipe card */}
@@ -133,15 +230,44 @@ export default function SwipePage() {
         </div>
       ) : (
         <div className="text-center text-gray-400 mt-12">
-          <p className="text-4xl mb-2">✨</p>
-          <p>No more hangouts to discover right now.</p>
-          <button onClick={loadFeed} className="mt-4 text-orange-500 font-medium hover:text-orange-600">Refresh feed</button>
+          <p className="text-4xl mb-2">{selectedTags.length ? "🔎" : "✨"}</p>
+          <p>
+            {selectedTags.length
+              ? "No hangouts match these filters."
+              : "No more hangouts to discover right now."}
+          </p>
+          {selectedTags.length ? (
+            <button
+              onClick={() => setSelectedTags([])}
+              className="mt-4 text-orange-500 font-medium hover:text-orange-600"
+            >
+              Clear filters
+            </button>
+          ) : (
+            <button onClick={loadFeed} className="mt-4 text-orange-500 font-medium hover:text-orange-600">Refresh feed</button>
+          )}
         </div>
       )}
 
       <p className="text-xs text-gray-400 text-center mt-6">
-        {feed.length > 0 && index < feed.length ? `${index + 1} / ${feed.length}` : ""}
+        {filteredFeed.length > 0 && index < filteredFeed.length ? `${index + 1} / ${filteredFeed.length}` : ""}
       </p>
+
+      <style jsx>{`
+        .animate-float {
+          animation-name: floatY;
+          animation-iteration-count: infinite;
+          animation-timing-function: ease-in-out;
+        }
+        @keyframes floatY {
+          0%, 100% {
+            transform: translateY(0);
+          }
+          50% {
+            transform: translateY(-8px);
+          }
+        }
+      `}</style>
     </div>
   );
 }
