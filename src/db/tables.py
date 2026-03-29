@@ -21,12 +21,12 @@ class UserTable(Base):
     email = Column(String, nullable=False, unique=True, index=True)
     username = Column(String, nullable=True, unique=True, index=True)
     password_hash = Column(String, nullable=True)
-    auth_provider = Column(String, nullable=True)  # "email" | "google"
+    auth_provider = Column(String, nullable=True)
     google_id = Column(String, nullable=True, unique=True, index=True)
-    google_calendar_token = Column(Text, nullable=True)  # JSON string
-    preferences = Column(Text, nullable=True)  # JSON string
-    profile = Column(Text, nullable=True)  # JSON string (UserProfile)
-    availability = Column(Text, nullable=True)  # JSON string (UserAvailability)
+    google_calendar_token = Column(Text, nullable=True)
+    preferences = Column(Text, nullable=True)
+    profile = Column(Text, nullable=True)
+    availability = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
 
@@ -57,7 +57,7 @@ class EventTable(Base):
 
     id = Column(String, primary_key=True)
     group_id = Column(String, ForeignKey("groups.id"), nullable=False)
-    itinerary = Column(Text, nullable=True)  # JSON string
+    itinerary = Column(Text, nullable=True)
     status = Column(String, default="proposed")
     created_at = Column(DateTime, default=datetime.now)
 
@@ -68,7 +68,7 @@ class FriendshipTable(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     requester_id = Column(String, ForeignKey("users.id"), nullable=False)
     addressee_id = Column(String, ForeignKey("users.id"), nullable=False)
-    status = Column(String, default="pending")  # pending | accepted | declined
+    status = Column(String, default="pending")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -80,32 +80,27 @@ class FeedbackTable(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     event_id = Column(String, ForeignKey("events.id"), nullable=False)
     overall_rating = Column(Integer, nullable=False)
-    venue_ratings = Column(Text, nullable=True)  # JSON string
-    would_repeat = Column(Integer, default=0)  # SQLite boolean
+    venue_ratings = Column(Text, nullable=True)
+    would_repeat = Column(Integer, default=0)
     free_text = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
 
-# ── Hangouts + Swipe + Matching ────────────────────────────────────────
-
-
 class HangoutTable(Base):
-    """A discoverable hangout proposal — the card users swipe on."""
     __tablename__ = "hangouts"
 
     id = Column(String, primary_key=True)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
-    time_window = Column(Text, nullable=True)  # JSON: {"start": iso, "end": iso}
+    time_window = Column(Text, nullable=True)
     location_area = Column(String, nullable=True)
-    tags = Column(Text, nullable=True)  # JSON list of strings
-    source = Column(String, default="user_created")  # ai_suggested | user_created | template
+    tags = Column(Text, nullable=True)
+    source = Column(String, default="user_created")
     created_by = Column(String, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
 
 class SwipeTable(Base):
-    """A user's swipe (pass/interested) on a hangout card. Idempotent."""
     __tablename__ = "swipes"
     __table_args__ = (
         UniqueConstraint("user_id", "hangout_id", name="uq_swipe_user_hangout"),
@@ -114,34 +109,43 @@ class SwipeTable(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     hangout_id = Column(String, ForeignKey("hangouts.id"), nullable=False)
-    action = Column(String, nullable=False)  # "pass" | "interested"
+    action = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
 class SuggestedMatchTable(Base):
-    """A suggested group formed by the matching engine."""
     __tablename__ = "suggested_matches"
 
     id = Column(String, primary_key=True)
     hangout_id = Column(String, ForeignKey("hangouts.id"), nullable=False)
-    member_user_ids = Column(Text, nullable=False)  # JSON list of user IDs
-    score = Column(Integer, default=0)  # match quality 0-100
-    status = Column(String, default="pending")  # pending | accepted | dismissed
-    group_id = Column(String, ForeignKey("groups.id"), nullable=True)  # set after "Plan this outing"
+    member_user_ids = Column(Text, nullable=False)
+    score = Column(Integer, default=0)
+    status = Column(String, default="pending")
+    group_id = Column(String, ForeignKey("groups.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
 
 class PresetTable(Base):
-    """User-defined discover preset."""
     __tablename__ = "presets"
 
     id = Column(String, primary_key=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
-    source = Column(String, default="manual")  # manual | ai
-    criteria = Column(Text, nullable=False)  # JSON object
-    is_favorite = Column(Integer, default=0)  # SQLite boolean
+    source = Column(String, default="manual")
+    criteria = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class PresetFavoriteTable(Base):
+    __tablename__ = "preset_favorites"
+    __table_args__ = (
+        UniqueConstraint("user_id", "preset_id", name="uq_preset_favorite_user_preset"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    preset_id = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.now)
