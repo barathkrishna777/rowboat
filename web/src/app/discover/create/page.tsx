@@ -1,0 +1,62 @@
+"use client";
+
+import { useAuth } from "@/lib/auth-context";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+
+function MethodCard({
+  title,
+  description,
+  href,
+  recommended,
+}: {
+  title: string;
+  description: string;
+  href: string;
+  recommended?: boolean;
+}) {
+  return (
+    <a href={href} className="block bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 shadow-sm hover:border-orange-400 transition-colors">
+      {recommended && (
+        <p className="text-xs font-semibold uppercase tracking-wide text-orange-500 mb-2">Recommended</p>
+      )}
+      <h2 className="text-xl font-bold text-[var(--text)] mb-2">{title}</h2>
+      <p className="text-[var(--text-muted)]">{description}</p>
+    </a>
+  );
+}
+
+export default function CreatePresetChooserPage() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !user) router.replace("/login");
+  }, [loading, user, router]);
+
+  if (loading) return <p className="text-center mt-20 text-[var(--text)]">Loading...</p>;
+  if (!user) return null;
+
+  return (
+    <div className="max-w-2xl mx-auto">
+      <h1 className="text-3xl font-bold text-[var(--text)] mb-2">Create preset</h1>
+      <p className="text-[var(--text-muted)] mb-8">
+        Choose how you want to build your preset. Manual creation is live; natural-language creation is next.
+      </p>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <MethodCard
+          title="Build manually"
+          description="Pick activities, cuisine, and other options one by one."
+          href="/discover/create/manual"
+        />
+        <MethodCard
+          title="Describe it naturally"
+          description="Type what you want in plain English and let the AI draft a structured preset."
+          href="/discover/create/magic"
+          recommended
+        />
+      </div>
+    </div>
+  );
+}

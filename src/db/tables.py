@@ -130,3 +130,18 @@ class SuggestedMatchTable(Base):
     status = Column(String, default="pending")  # pending | accepted | dismissed
     group_id = Column(String, ForeignKey("groups.id"), nullable=True)  # set after "Plan this outing"
     created_at = Column(DateTime, default=datetime.now)
+
+
+class PresetTable(Base):
+    """User-defined discover preset."""
+    __tablename__ = "presets"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    source = Column(String, default="manual")  # manual | ai
+    criteria = Column(Text, nullable=False)  # JSON object
+    is_favorite = Column(Integer, default=0)  # SQLite boolean
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
