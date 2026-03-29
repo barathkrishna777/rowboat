@@ -41,7 +41,7 @@ export default function CreatePresetChooserPage() {
     <div className="max-w-2xl mx-auto">
       <h1 className="text-3xl font-bold text-[var(--text)] mb-2">Create preset</h1>
       <p className="text-[var(--text-muted)] mb-8">
-        Choose how you want to build your preset. Manual creation is live; natural-language creation is next.
+        Choose how you want to build your preset. Both routes will become full flows in upcoming phases.
       </p>
 
       <div className="grid gap-4 md:grid-cols-2">

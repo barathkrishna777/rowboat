@@ -1,9 +1,8 @@
 "use client";
 
 import { useAuth } from "@/lib/auth-context";
-import { presets as presetsApi, Preset } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect } from "react";
 
 function BigCard({
   title,
@@ -35,22 +34,10 @@ function BigCard({
 export default function DiscoverHomePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const [presets, setPresets] = useState<Preset[]>([]);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [loading, user, router]);
-
-  useEffect(() => {
-    if (!user) return;
-    presetsApi.list().then(setPresets).catch(() => setPresets([]));
-  }, [user]);
-
-  const favoriteCards = useMemo(() => {
-    const favorites = presets.filter((p) => p.is_favorite).slice(0, 4);
-    if (favorites.length > 0) return favorites;
-    return presets.slice(0, 4);
-  }, [presets]);
 
   if (loading) return <p className="text-center mt-20 text-[var(--text)]">Loading...</p>;
   if (!user) return null;
@@ -80,12 +67,22 @@ export default function DiscoverHomePage() {
       <section className="mb-8">
         <h2 className="text-lg font-semibold text-[var(--text)] mb-3">Your favorite preset cards</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          {favoriteCards.map((preset) => (
-            <BigCard key={preset.id} title={preset.name} description={preset.description || "Saved discover preset."} />
-          ))}
-          {favoriteCards.length === 0 && (
-            <BigCard title="No favorites yet" description="Mark custom presets as favorites to pin them here." />
-          )}
+          <BigCard
+            title="Feeling like Partying"
+            description="High-energy places, lively atmosphere, and late-night options."
+          />
+          <BigCard
+            title="Sunday roast?"
+            description="Comfort food, cozy vibes, and relaxed pacing."
+          />
+          <BigCard
+            title="In the mood for a hike"
+            description="Outdoor-first ideas with nature-friendly follow-up spots."
+          />
+          <BigCard
+            title="Custom: Rainy day reset"
+            description="A saved custom filter combining cafe, bookstore, and low-noise settings."
+          />
         </div>
       </section>
 
