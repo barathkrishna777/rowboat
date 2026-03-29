@@ -247,7 +247,7 @@ export const plans = {
       }),
     }),
 
-  orchestrate: (payload: {
+  orchestrate: async (payload: {
     request: string;
     group_name?: string;
     members?: { name: string; email: string }[];
@@ -257,11 +257,25 @@ export const plans = {
     date_range_end?: string;
     earliest_time?: string;
     latest_time?: string;
-  }) =>
-    request<OrchestratorPlan>("/plans/orchestrate", {
+  }): Promise<OrchestratorPlan> => {
+    const raw = await request<OrchestratorPlan>("/plans/orchestrate", {
       method: "POST",
       body: JSON.stringify(payload),
-    }),
+    });
+
+    // Some backend responses still nest venue fields under `venue`.
+    const flattenVenue = (item: ScoredVenue | Record<string, unknown>): ScoredVenue => {
+      const venue = (item as Record<string, unknown>).venue as Record<string, unknown> | undefined;
+      if (!venue || typeof venue !== "object") return item as ScoredVenue;
+      const { venue: _venue, ...rest } = item as Record<string, unknown>;
+      return { ...venue, ...rest } as ScoredVenue;
+    };
+
+    raw.ranked_venues = (raw.ranked_venues || []).map(flattenVenue);
+    raw.rejected_venues = (raw.rejected_venues || []).map(flattenVenue);
+
+    return raw;
+  },
 };
 
 // ── Calendar ──────────────────────────────────────────────────────────
