@@ -14,6 +14,12 @@ import { useRouter } from "next/navigation";
 
 type Mode = "landing" | "vibe_input" | "custom_preset";
 
+const VIBE_SUGGESTIONS = [
+  "bowling", "brunch", "nightlife", "hiking", "karaoke",
+  "trivia", "coffee", "live music", "escape room", "arcade",
+  "beer garden", "comedy show", "museum", "mini golf", "food truck",
+];
+
 export default function SwipePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -262,15 +268,19 @@ export default function SwipePage() {
   if (mode === "vibe_input") {
     const rankedVenues = orchestratorResult?.ranked_venues || [];
     const currentVenue = rankedVenues[vibeIndex] as ScoredVenue | undefined;
+    const availableSuggestions = VIBE_SUGGESTIONS.filter(
+      (s) => !vibeKeywords.includes(s),
+    );
 
     return (
-      <div className="min-h-[calc(100vh-80px)] -mx-4 sm:mx-0 rounded-3xl bg-[#04070F] text-white px-4 sm:px-8 py-8 overflow-hidden">
-        <div className="max-w-3xl mx-auto relative">
+      <div className="min-h-[calc(100vh-80px)] -mx-4 sm:mx-0 rounded-3xl bg-[#04070F] text-white px-4 sm:px-8 py-8 overflow-hidden flex flex-col">
+        <div className="max-w-3xl mx-auto relative flex-1 flex flex-col">
           <BackButton />
           <GlowBlob />
 
-          {/* Floating keyword bubbles around the blob */}
-          <div className="relative h-72 flex items-center justify-center mt-8">
+          {/* Blob area: heading + suggestion bubbles + keyword bubbles */}
+          <div className="relative h-80 flex items-center justify-center mt-8 mb-4">
+            {/* "Choose Your Vibe" heading -- shown when no keywords and not loading */}
             {vibeKeywords.length === 0 && !vibeLoading && (
               <h2 className="text-3xl sm:text-4xl font-bold text-center bg-gradient-to-r from-blue-300 via-orange-200 to-purple-300 bg-clip-text text-transparent relative z-10">
                 Choose Your Vibe
@@ -284,9 +294,40 @@ export default function SwipePage() {
               </div>
             )}
 
+            {/* Default suggestion bubbles -- transparent, scattered, floating */}
+            {availableSuggestions.map((suggestion, i) => {
+              const total = availableSuggestions.length;
+              const angle = (2 * Math.PI * i) / Math.max(total, 1) - Math.PI / 2;
+              const ring = i < 8 ? 0 : 1;
+              const radius = ring === 0 ? 120 : 85;
+              const x = Math.cos(angle) * radius;
+              const y = Math.sin(angle) * radius;
+              const size = 62 + ((i * 7) % 28);
+              const duration = 4 + (i % 4);
+              const delay = (i % 5) * 0.4;
+              return (
+                <button
+                  key={`sug-${suggestion}`}
+                  onClick={() => addKeyword(suggestion)}
+                  className="absolute z-10 rounded-full flex items-center justify-center text-center bg-white/[0.07] border border-white/[0.12] text-white/70 text-[11px] font-medium backdrop-blur-[2px] hover:bg-white/15 hover:text-white hover:border-white/30 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] transition-all duration-300 animate-float"
+                  style={{
+                    width: `${size}px`,
+                    height: `${size}px`,
+                    left: `calc(50% + ${x}px - ${size / 2}px)`,
+                    top: `calc(50% + ${y}px - ${size / 2}px)`,
+                    animationDuration: `${duration}s`,
+                    animationDelay: `${delay}s`,
+                  }}
+                >
+                  {suggestion}
+                </button>
+              );
+            })}
+
+            {/* Active keyword bubbles -- brighter, orbiting closer to center */}
             {vibeKeywords.map((kw, i) => {
               const angle = (2 * Math.PI * i) / Math.max(vibeKeywords.length, 1);
-              const radius = 110;
+              const radius = 55;
               const x = Math.cos(angle) * radius;
               const y = Math.sin(angle) * radius;
               const duration = 5 + (i % 3);
@@ -309,49 +350,9 @@ export default function SwipePage() {
             })}
           </div>
 
-          {/* Text input */}
-          <div className="max-w-md mx-auto mb-8 relative z-10">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={vibeInput}
-                onChange={(e) => setVibeInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addKeyword(vibeInput);
-                  }
-                }}
-                placeholder="Type a vibe... (e.g. chill, beer party, bowling)"
-                className="flex-1 bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-white/40 focus:outline-none focus:border-orange-400/60 focus:ring-1 focus:ring-orange-400/30 transition"
-                disabled={vibeLoading}
-              />
-              <button
-                onClick={() => addKeyword(vibeInput)}
-                disabled={!vibeInput.trim() || vibeLoading}
-                className="bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl px-5 py-3 font-semibold transition"
-              >
-                Add
-              </button>
-            </div>
-            {vibeKeywords.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-3">
-                {vibeKeywords.map((kw) => (
-                  <span
-                    key={`chip-${kw}`}
-                    className="inline-flex items-center gap-1 bg-white/10 border border-white/20 rounded-full px-3 py-1 text-xs text-white/80"
-                  >
-                    {kw}
-                    <button onClick={() => removeKeyword(kw)} className="text-white/50 hover:text-red-400 transition">&times;</button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
           {/* Venue cards from orchestrator */}
           {rankedVenues.length > 0 && !vibeLoading && (
-            <div className="relative z-10">
+            <div className="relative z-10 flex-shrink-0 mb-6">
               {currentVenue ? (
                 <div className="max-w-lg mx-auto bg-white border border-gray-200 rounded-3xl p-6 shadow-lg text-black">
                   <div className="flex items-start justify-between mb-2">
@@ -415,12 +416,48 @@ export default function SwipePage() {
             </div>
           )}
 
-          {/* No keywords yet prompt */}
-          {vibeKeywords.length === 0 && !vibeLoading && (
-            <p className="text-center text-white/30 text-sm mt-4">
-              Type keywords above and we&apos;ll find matching venues for you
-            </p>
-          )}
+          {/* Spacer pushes input to bottom */}
+          <div className="flex-1" />
+
+          {/* Text input -- anchored at the bottom */}
+          <div className="max-w-md mx-auto w-full relative z-10 pb-4">
+            {vibeKeywords.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {vibeKeywords.map((kw) => (
+                  <span
+                    key={`chip-${kw}`}
+                    className="inline-flex items-center gap-1 bg-white/10 border border-white/20 rounded-full px-3 py-1 text-xs text-white/80"
+                  >
+                    {kw}
+                    <button onClick={() => removeKeyword(kw)} className="text-white/50 hover:text-red-400 transition">&times;</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={vibeInput}
+                onChange={(e) => setVibeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addKeyword(vibeInput);
+                  }
+                }}
+                placeholder="Type a vibe... (e.g. chill, beer party, bowling)"
+                className="flex-1 bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-white/40 focus:outline-none focus:border-orange-400/60 focus:ring-1 focus:ring-orange-400/30 transition"
+                disabled={vibeLoading}
+              />
+              <button
+                onClick={() => addKeyword(vibeInput)}
+                disabled={!vibeInput.trim() || vibeLoading}
+                className="bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl px-5 py-3 font-semibold transition"
+              >
+                Add
+              </button>
+            </div>
+          </div>
         </div>
 
         <style jsx>{`
