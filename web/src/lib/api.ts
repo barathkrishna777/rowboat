@@ -296,6 +296,7 @@ export interface Hangout {
   tags: string[];
   source: string;
   created_by?: string;
+  match_reason?: string;
 }
 
 export interface SuggestedMatch {
@@ -307,9 +308,30 @@ export interface SuggestedMatch {
   group_id?: string;
 }
 
+export interface PresetCriteria {
+  cuisine_preferences: string[];
+  activity_preferences: string[];
+  dietary_restrictions: string[];
+  budget_max?: string;
+  dealbreakers: string[];
+  preferred_neighborhoods: string[];
+  accessibility_needs: string[];
+}
+
+export interface Preset {
+  id: string;
+  name: string;
+  description?: string;
+  source: "manual" | "ai" | "built_in";
+  criteria: PresetCriteria;
+  is_favorite: boolean;
+  is_built_in: boolean;
+  created_at?: string;
+}
+
 export const hangouts = {
   list: () => request<Hangout[]>("/hangouts"),
-  feed: () => request<Hangout[]>("/hangouts/feed/me"),
+  feed: (presetId?: string) => request<Hangout[]>(`/hangouts/feed/me${presetId ? `?preset_id=${encodeURIComponent(presetId)}` : ""}`),
   create: (data: { title: string; description?: string; tags?: string[]; location_area?: string }) =>
     request<Hangout>("/hangouts", { method: "POST", body: JSON.stringify(data) }),
   swipe: (hangoutId: string, action: "pass" | "interested") =>
@@ -321,4 +343,33 @@ export const hangouts = {
     request<SuggestedMatch[]>(`/hangouts/${hangoutId}/generate-matches`, { method: "POST" }),
   createGroupFromMatch: (matchId: string) =>
     request<SuggestedMatch>(`/hangouts/matches/${matchId}/create-group`, { method: "POST" }),
+};
+
+// ── Presets ───────────────────────────────────────────────────────────
+
+export const presets = {
+  list: () => request<Preset[]>("/presets"),
+  create: (data: {
+    name: string;
+    description?: string;
+    source?: "manual" | "ai";
+    criteria?: Partial<PresetCriteria>;
+    is_favorite?: boolean;
+  }) =>
+    request<Preset>("/presets", { method: "POST", body: JSON.stringify(data) }),
+  setFavorite: (presetId: string, isFavorite: boolean) =>
+    request<Preset>(`/presets/${presetId}/favorite`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_favorite: isFavorite }),
+    }),
+  parse: (text: string) =>
+    request<{
+      name_suggestion: string;
+      description_suggestion: string;
+      confidence: number;
+      criteria: PresetCriteria;
+    }>("/presets/parse", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
 };
