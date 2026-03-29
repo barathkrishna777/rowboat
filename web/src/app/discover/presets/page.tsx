@@ -5,43 +5,70 @@ import { presets as presetsApi, Preset } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-function PresetCard({ preset, onToggleFavorite, busy }: { preset: Preset; onToggleFavorite: (preset: Preset) => void; busy: boolean; }) {
+function PresetCard({
+  preset,
+  onToggleFavorite,
+  busy,
+}: {
+  preset: Preset;
+  onToggleFavorite: (preset: Preset) => void;
+  busy: boolean;
+}) {
   const chips = [
     ...preset.criteria.activity_preferences,
     ...preset.criteria.cuisine_preferences,
   ].slice(0, 4);
 
   return (
-    <div className="rounded-[1.75rem] border border-white/10 bg-white/[0.05] p-5 shadow-[0_18px_60px_rgba(7,10,20,0.22)] backdrop-blur-sm">
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div>
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-orange-300/70">
-            {preset.source === "built_in" ? "Built-in" : preset.source === "ai" ? "AI-shaped" : "Handmade"}
-          </p>
-          <h3 className="font-['Iowan_Old_Style','Palatino_Linotype','Book_Antiqua','Georgia',serif] text-2xl font-semibold text-white">
-            {preset.name}
-          </h3>
+    <div className="rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_12px_36px_rgba(15,23,42,0.07)] dark:shadow-[0_18px_48px_rgba(2,6,23,0.28)]">
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">
+                {preset.source === "built_in" ? "Built-in" : preset.source === "ai" ? "AI-shaped" : "Handmade"}
+              </p>
+              <h3 className="font-['Iowan_Old_Style','Palatino_Linotype','Book_Antiqua','Georgia',serif] text-2xl font-semibold leading-tight text-[var(--text)]">
+                {preset.name}
+              </h3>
+            </div>
+            <button
+              onClick={() => onToggleFavorite(preset)}
+              disabled={busy}
+              aria-label={preset.is_favorite ? "Unfavorite preset" : "Favorite preset"}
+              className={`text-2xl leading-none transition-colors ${preset.is_favorite ? "text-red-500" : "text-[var(--text-muted)] hover:text-red-400"} disabled:opacity-50`}
+            >
+              ♥
+            </button>
+          </div>
+
+          {preset.description && (
+            <p className="mb-4 text-sm leading-6 text-[var(--text-muted)]">{preset.description}</p>
+          )}
+
+          {chips.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {chips.map((chip) => (
+                <span
+                  key={chip}
+                  className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 dark:border-orange-500/25 dark:bg-orange-500/10 dark:text-orange-200"
+                >
+                  {chip}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
-        <button
-          onClick={() => onToggleFavorite(preset)}
-          disabled={busy}
-          aria-label={preset.is_favorite ? "Unfavorite preset" : "Favorite preset"}
-          className={`text-2xl leading-none transition-colors ${preset.is_favorite ? "text-red-400" : "text-white/35 hover:text-red-300"} disabled:opacity-50`}
-        >
-          ♥
-        </button>
+
+        <div className="flex items-center gap-3 xl:flex-col xl:items-end">
+          <a
+            href={`/swipe?preset_id=${encodeURIComponent(preset.id)}`}
+            className="inline-flex rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600"
+          >
+            Launch
+          </a>
+        </div>
       </div>
-      <p className="mb-4 text-sm leading-6 text-white/68">{preset.description || "A sharper starting point for your next outing."}</p>
-      <div className="flex flex-wrap gap-2 mb-4">
-        {chips.map((chip) => (
-          <span key={chip} className="rounded-full border border-orange-400/20 bg-orange-500/12 px-3 py-1 text-xs font-semibold text-orange-100">
-            {chip}
-          </span>
-        ))}
-      </div>
-      <a href={`/swipe?preset_id=${encodeURIComponent(preset.id)}`} className="inline-block rounded-xl bg-orange-500 px-4 py-2.5 font-semibold text-white transition hover:bg-orange-600">
-        Launch this preset
-      </a>
     </div>
   );
 }
@@ -61,64 +88,83 @@ export default function PresetsPage() {
     presetsApi.list().then(setPresets).catch(() => setPresets([]));
   }, [user]);
 
-  const favorites = useMemo(() => presets.filter((p) => p.is_favorite), [presets]);
-  const regular = useMemo(() => presets.filter((p) => !p.is_favorite), [presets]);
+  const favorites = useMemo(() => presets.filter((preset) => preset.is_favorite), [presets]);
+  const regular = useMemo(() => presets.filter((preset) => !preset.is_favorite), [presets]);
 
   const toggleFavorite = async (preset: Preset) => {
     setBusyId(preset.id);
     try {
       const updated = await presetsApi.setFavorite(preset.id, !preset.is_favorite);
-      setPresets((prev) => prev.map((p) => (p.id === preset.id ? updated : p)));
+      setPresets((prev) => prev.map((item) => (item.id === preset.id ? updated : item)));
     } finally {
       setBusyId(null);
     }
   };
 
-  if (loading) return <p className="text-center mt-20 text-[var(--text)]">Loading...</p>;
+  if (loading) return <p className="mt-20 text-center text-[var(--text)]">Loading...</p>;
   if (!user) return null;
 
   return (
-    <div className="-mx-4 -my-8 min-h-[calc(100vh-80px)] bg-[#050816] px-4 py-10 text-white sm:px-8">
-      <div className="mx-auto max-w-5xl">
-        <div className="relative overflow-hidden rounded-[2.25rem] border border-white/10 bg-[linear-gradient(135deg,rgba(12,17,36,0.98),rgba(8,10,20,0.96))] px-6 py-8 shadow-[0_24px_80px_rgba(2,6,23,0.55)] sm:px-10">
-          <div className="absolute right-[-8%] top-[-12%] h-72 w-72 rounded-full bg-[radial-gradient(circle,rgba(96,165,250,0.22),rgba(251,146,60,0.16)_45%,transparent_70%)] blur-3xl" />
-          <div className="relative z-10 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-            <div className="max-w-2xl">
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.34em] text-orange-200/78">Preset library</p>
-              <h1 className="font-['Iowan_Old_Style','Palatino_Linotype','Book_Antiqua','Georgia',serif] text-5xl font-semibold leading-[0.95]">
-                Keep your best-ready moods one tap away.
+    <div className="-mx-4 -my-8 px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <section className="relative overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface)] px-5 py-6 shadow-[0_14px_48px_rgba(15,23,42,0.08)] dark:shadow-[0_22px_72px_rgba(2,6,23,0.35)] sm:px-8">
+          <div className="absolute inset-x-0 top-0 h-36 bg-gradient-to-r from-sky-200/45 via-orange-100/55 to-emerald-100/35 blur-3xl dark:from-sky-500/10 dark:via-orange-500/10 dark:to-emerald-500/8" />
+          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.32em] text-[var(--text-muted)]">
+                Presets
+              </p>
+              <h1 className="font-['Iowan_Old_Style','Palatino_Linotype','Book_Antiqua','Georgia',serif] text-4xl font-semibold leading-tight text-[var(--text)] sm:text-5xl">
+                Fast starts, kept tidy.
               </h1>
-              <p className="mt-4 text-sm leading-7 text-white/65 sm:text-base">
-                Favorite the presets you keep coming back to, launch them instantly, or build a new one that feels even more specific.
+              <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
+                Pin the good ones. Launch them quickly.
               </p>
             </div>
-            <a href="/discover/create" className="inline-flex rounded-xl border border-orange-300/30 bg-orange-500/15 px-4 py-2.5 text-sm font-semibold text-orange-100 transition hover:border-orange-200/60 hover:bg-orange-500/22 hover:text-white">
-              Create a fresh preset
+            <a
+              href="/discover/create"
+              className="inline-flex w-fit rounded-xl border border-orange-200 bg-orange-50 px-4 py-2.5 text-sm font-semibold text-orange-700 transition hover:bg-orange-100 dark:border-orange-500/25 dark:bg-orange-500/10 dark:text-orange-200 dark:hover:bg-orange-500/16"
+            >
+              Create preset
             </a>
           </div>
-        </div>
+        </section>
 
         {favorites.length > 0 && (
-          <section className="mt-8 mb-8">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.28em] text-white/46">Pinned favorites</h2>
-            <div className="grid gap-4 lg:grid-cols-2">
+          <section>
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.22em] text-[var(--text-muted)]">
+              Favorites
+            </h2>
+            <div className="grid gap-4">
               {favorites.map((preset) => (
-                <PresetCard key={preset.id} preset={preset} onToggleFavorite={toggleFavorite} busy={busyId === preset.id} />
+                <PresetCard
+                  key={preset.id}
+                  preset={preset}
+                  onToggleFavorite={toggleFavorite}
+                  busy={busyId === preset.id}
+                />
               ))}
             </div>
           </section>
         )}
 
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.28em] text-white/46">All presets</h2>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.22em] text-[var(--text-muted)]">
+            All presets
+          </h2>
           {regular.length === 0 ? (
-            <div className="rounded-[1.75rem] border border-dashed border-white/15 bg-white/[0.04] p-6 text-white/58">
-              No extra presets yet. Create one and turn a loose idea into a reusable starting point.
+            <div className="rounded-[1.5rem] border border-dashed border-[var(--border)] bg-[var(--surface)] p-6 text-sm text-[var(--text-muted)]">
+              No extra presets yet.
             </div>
           ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4">
               {regular.map((preset) => (
-                <PresetCard key={preset.id} preset={preset} onToggleFavorite={toggleFavorite} busy={busyId === preset.id} />
+                <PresetCard
+                  key={preset.id}
+                  preset={preset}
+                  onToggleFavorite={toggleFavorite}
+                  busy={busyId === preset.id}
+                />
               ))}
             </div>
           )}

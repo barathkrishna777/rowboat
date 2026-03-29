@@ -20,16 +20,24 @@ function DiscoveryCard({
   return (
     <a
       href={href}
-      className="group relative overflow-hidden rounded-[2rem] border border-white/12 bg-white/[0.05] p-7 shadow-[0_24px_80px_rgba(7,10,20,0.28)] backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:border-white/25 hover:bg-white/[0.08]"
+      className="group rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_12px_40px_rgba(15,23,42,0.08)] transition hover:-translate-y-0.5 hover:border-orange-300 dark:shadow-[0_18px_60px_rgba(2,6,23,0.35)] dark:hover:border-orange-500/40"
     >
-      <div className={`absolute inset-0 opacity-80 transition duration-300 group-hover:opacity-100 ${accent}`} />
-      <div className="relative z-10">
-        <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.32em] text-white/55">{eyebrow}</p>
-        <h2 className="mb-3 max-w-sm font-['Iowan_Old_Style','Palatino_Linotype','Book_Antiqua','Georgia',serif] text-3xl font-semibold leading-[1.02] text-white">
-          {title}
-        </h2>
-        <p className="max-w-md text-sm leading-6 text-white/72">{description}</p>
-        <p className="mt-6 text-sm font-semibold text-orange-200 transition group-hover:text-white">Open path</p>
+      <div className="flex h-full flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-start gap-4">
+          <div className={`h-12 w-1.5 rounded-full ${accent}`} />
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.26em] text-[var(--text-muted)]">
+              {eyebrow}
+            </p>
+            <h2 className="font-['Iowan_Old_Style','Palatino_Linotype','Book_Antiqua','Georgia',serif] text-3xl font-semibold leading-tight text-[var(--text)]">
+              {title}
+            </h2>
+            <p className="mt-2 max-w-md text-sm leading-6 text-[var(--text-muted)]">{description}</p>
+          </div>
+        </div>
+        <div className="inline-flex w-fit rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-700 transition group-hover:border-orange-300 group-hover:bg-orange-100 dark:border-orange-500/25 dark:bg-orange-500/10 dark:text-orange-200 dark:group-hover:border-orange-400/45 dark:group-hover:bg-orange-500/16">
+          Open
+        </div>
       </div>
     </a>
   );
@@ -43,49 +51,44 @@ export default function DiscoverHomePage() {
     if (!loading && !user) router.replace("/login");
   }, [loading, user, router]);
 
-  if (loading) return <p className="text-center mt-20 text-[var(--text)]">Loading...</p>;
+  if (loading) return <p className="mt-20 text-center text-[var(--text)]">Loading...</p>;
   if (!user) return null;
 
   return (
-    <div className="-mx-4 -my-8 min-h-[calc(100vh-80px)] overflow-hidden bg-[#050816] px-4 py-10 text-white sm:px-8">
-      <div className="mx-auto max-w-5xl">
-        <section className="relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-[linear-gradient(135deg,rgba(12,17,36,0.98),rgba(8,10,20,0.96))] px-6 py-10 shadow-[0_24px_80px_rgba(2,6,23,0.55)] sm:px-10 sm:py-14">
-          <div className="absolute inset-x-0 top-[-10%] h-64 bg-[radial-gradient(circle_at_top,rgba(96,165,250,0.28),rgba(251,146,60,0.18)_38%,rgba(168,85,247,0.14)_60%,transparent_75%)] blur-3xl" />
-          <div className="relative z-10 max-w-3xl">
-            <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.36em] text-orange-200/80">
-              Discover
-            </p>
-            <h1 className="max-w-2xl font-['Iowan_Old_Style','Palatino_Linotype','Book_Antiqua','Georgia',serif] text-5xl font-semibold leading-[0.95] text-white sm:text-6xl">
-              Start with a mood or swipe from a preset that already knows your taste.
-            </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-white/68 sm:text-lg">
-              The bubble-first experience powers the vibe path. Your preset flows keep the smarter ranking,
-              favorites, and creation tools already built into this branch.
-            </p>
-          </div>
+    <div className="-mx-4 -my-8 px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
+        <section className="relative overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface)] px-5 py-6 shadow-[0_14px_48px_rgba(15,23,42,0.08)] dark:shadow-[0_22px_72px_rgba(2,6,23,0.35)] sm:px-8">
+          <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-r from-orange-200/45 via-sky-100/55 to-emerald-100/35 blur-3xl dark:from-orange-500/12 dark:via-sky-500/10 dark:to-emerald-500/8" />
 
-          <section className="relative z-10 mt-10 grid gap-5 lg:grid-cols-2">
-            <DiscoveryCard
-              eyebrow="Mood-First"
-              title="Choose your vibe!"
-              description="Pick a few glowing prompts or type your own. We’ll turn that feeling into venue suggestions instantly."
-              href="/discover/vibe"
-              accent="bg-[radial-gradient(circle_at_top_left,rgba(251,146,60,0.18),transparent_48%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.14),transparent_46%)]"
-            />
-            <DiscoveryCard
-              eyebrow="Preset-Driven"
-              title="Curated presets, custom taste."
-              description="Browse favorites, launch built-ins, or create a sharper preset with natural language when you want more control."
-              href="/discover/presets"
-              accent="bg-[radial-gradient(circle_at_top_left,rgba(96,165,250,0.2),transparent_48%),radial-gradient(circle_at_bottom_right,rgba(34,197,94,0.12),transparent_44%)]"
-            />
-          </section>
+          <div className="relative grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] lg:items-start">
+            <div className="max-w-md">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.32em] text-[var(--text-muted)]">
+                Discover
+              </p>
+              <h1 className="font-['Iowan_Old_Style','Palatino_Linotype','Book_Antiqua','Georgia',serif] text-5xl font-semibold leading-[0.94] text-[var(--text)]">
+                Pick a starting point.
+              </h1>
+              <p className="mt-3 text-sm leading-6 text-[var(--text-muted)]">
+                Mood-first when you want speed. Presets when you want precision.
+              </p>
+            </div>
 
-          <div className="relative z-10 mt-8 flex flex-wrap gap-3 text-xs uppercase tracking-[0.22em] text-white/40">
-            <span>Vibe prompts</span>
-            <span>Preset favorites</span>
-            <span>Natural-language creation</span>
-            <span>Intentional swiping</span>
+            <div className="grid gap-4">
+              <DiscoveryCard
+                eyebrow="Mood-first"
+                title="Choose your vibe"
+                description="Quick prompts and custom keywords for fast discovery."
+                href="/discover/vibe"
+                accent="bg-gradient-to-b from-orange-400 via-pink-400 to-violet-500"
+              />
+              <DiscoveryCard
+                eyebrow="Preset-driven"
+                title="Browse presets"
+                description="Launch favorites or create a sharper preset when you want control."
+                href="/discover/presets"
+                accent="bg-gradient-to-b from-sky-400 via-cyan-400 to-emerald-500"
+              />
+            </div>
           </div>
         </section>
       </div>
