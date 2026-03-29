@@ -23,6 +23,7 @@ import {
   groups as groupsApi,
   plans as plansApi,
   calendar as calendarApi,
+  preferences as preferencesApi,
   configStatus,
   ConfigStatus,
   Group,
@@ -188,6 +189,23 @@ function PlanPageInner() {
   const [orchestrating, setOrchestrating] = useState(false);
   const [orchestratorResult, setOrchestratorResult] = useState<OrchestratorPlan | null>(null);
 
+  // Saved preferences from bio-to-preferences pipeline
+  const [savedPrefs, setSavedPrefs] = useState<UserPreferences | null>(null);
+
+  // Load saved preferences and pre-fill step 2 form
+  useEffect(() => {
+    if (!user) return;
+    preferencesApi.get(user.id).then((prefs) => {
+      setSavedPrefs(prefs);
+      if (prefs.cuisine_preferences?.length) setCuisines(prefs.cuisine_preferences.map(c => c.charAt(0).toUpperCase() + c.slice(1)));
+      if (prefs.activity_preferences?.length) setActivities(prefs.activity_preferences.map(a => a.charAt(0).toUpperCase() + a.slice(1)));
+      if (prefs.dietary_restrictions?.length) setDietary(prefs.dietary_restrictions.map(d => d.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())));
+      if (prefs.budget_max) setBudget(prefs.budget_max);
+      if (prefs.dealbreakers?.length) setDealbreakers(prefs.dealbreakers.join("\n"));
+      if (prefs.preferred_neighborhoods?.length) setNeighborhoods(prefs.preferred_neighborhoods.join(", "));
+    }).catch(() => {});
+  }, [user]);
+
   // Pre-load group from ?group_id query param (deep-link from swipe flow)
   useEffect(() => {
     if (!loading && !user) { router.replace("/login"); return; }
@@ -287,16 +305,22 @@ function PlanPageInner() {
     setOrchestrating(true);
     setGlobalError("");
     try {
+      const formPrefs: Partial<UserPreferences> = {
+        cuisine_preferences: cuisines.map(c => c.toLowerCase()),
+        activity_preferences: activities.map(a => a.toLowerCase()),
+        budget_max: budget,
+        dealbreakers: dealbreakers.split("\n").filter(Boolean),
+        dietary_restrictions: dietary.map(d => d.toLowerCase().replace(/ /g, "_")),
+        preferred_neighborhoods: neighborhoods.split(",").map(n => n.trim()).filter(Boolean),
+      };
+      const hasFormPrefs = cuisines.length || activities.length || dietary.length;
+      const prefsToSend = hasFormPrefs ? [formPrefs] : savedPrefs ? [savedPrefs] : [];
+
       const result = await plansApi.orchestrate({
         request: searchQuery,
         group_name: group?.name || groupName || "My Group",
         members,
-        preferences: cuisines.length || activities.length ? [{
-          cuisine_preferences: cuisines.map(c => c.toLowerCase()),
-          activity_preferences: activities.map(a => a.toLowerCase()),
-          budget_max: budget,
-          dealbreakers: dealbreakers.split("\n").filter(Boolean),
-        }] : [],
+        preferences: prefsToSend,
         location,
       });
       setOrchestratorResult(result);

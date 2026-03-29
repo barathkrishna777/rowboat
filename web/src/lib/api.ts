@@ -95,6 +95,8 @@ export const profile = {
   get: () => request<User["profile"]>("/profile/me"),
   update: (data: User["profile"]) =>
     request<User["profile"]>("/profile/me", { method: "PUT", body: JSON.stringify(data) }),
+  generatePreferences: () =>
+    request<UserPreferences>("/profile/me/generate-preferences", { method: "POST" }),
   getAvailability: () => request<User["availability"]>("/profile/me/availability"),
   updateAvailability: (data: User["availability"]) =>
     request<User["availability"]>("/profile/me/availability", { method: "PUT", body: JSON.stringify(data) }),

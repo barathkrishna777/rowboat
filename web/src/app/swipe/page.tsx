@@ -2,7 +2,13 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { hangouts as hangoutsApi, Hangout, SuggestedMatch } from "@/lib/api";
+import {
+  hangouts as hangoutsApi,
+  preferences as preferencesApi,
+  Hangout,
+  SuggestedMatch,
+  UserPreferences,
+} from "@/lib/api";
 import { useRouter } from "next/navigation";
 
 export default function SwipePage() {
@@ -12,6 +18,7 @@ export default function SwipePage() {
   const [index, setIndex] = useState(0);
   const [matches, setMatches] = useState<SuggestedMatch[]>([]);
   const [creating, setCreating] = useState(false);
+  const [userPrefs, setUserPrefs] = useState<UserPreferences | null>(null);
 
   const loadFeed = useCallback(async () => {
     try {
@@ -20,6 +27,13 @@ export default function SwipePage() {
       setIndex(0);
     } catch { /* ignore */ }
   }, []);
+
+  // Load user preferences on mount
+  useEffect(() => {
+    if (user) {
+      preferencesApi.get(user.id).then(setUserPrefs).catch(() => {});
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!loading && !user) { router.replace("/login"); return; }
