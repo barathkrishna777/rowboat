@@ -32,7 +32,6 @@ from src.models.hangout import (
 )
 from src.models.user import User, UserPreferences, UserProfile
 from src.models.preset import PresetCriteria
-from src.presets.agent import rank_hangouts_for_preset
 from src.presets.catalog import get_built_in_preset
 
 router = APIRouter()
@@ -154,12 +153,23 @@ async def my_feed(
     if not criteria:
         return cards
 
-    ranked_cards = rank_hangouts_for_preset(cards, criteria)
-    output: list[Hangout] = []
-    for ranked in ranked_cards:
-        card = ranked.card.model_copy(update={"match_reason": ranked.reason})
-        output.append(card)
-    return output
+    def _score(card: Hangout) -> int:
+        haystack = " ".join([
+            card.title.lower(),
+            (card.description or "").lower(),
+            " ".join([t.lower() for t in card.tags]),
+        ])
+        score = 0
+        for keyword in criteria.activity_preferences + criteria.cuisine_preferences:
+            if keyword.lower() in haystack:
+                score += 3
+        for vibe in criteria.dealbreakers:
+            if vibe.lower() in haystack:
+                score -= 2
+        return score
+
+    ranked = sorted(cards, key=_score, reverse=True)
+    return ranked
 
 
 # ── Swipe ──────────────────────────────────────────────────────────────
