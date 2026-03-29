@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
-import { DarkModeProvider, DarkModeToggle } from "@/lib/dark-mode";
+import { DarkModeProvider } from "@/lib/dark-mode";
+import { NavBar } from "./navbar";
 
 export const metadata: Metadata = {
   title: "Rowboat",
@@ -14,17 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen" style={{ backgroundColor: "var(--bg)", color: "var(--text)" }}>
         <DarkModeProvider>
           <AuthProvider>
-            <nav className="border-b px-6 py-3 flex items-center justify-between"
-              style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}>
-              <a href="/" className="text-xl font-bold text-orange-500">Rowboat</a>
-              <div className="flex items-center gap-4 text-sm">
-                <a href="/plan" className="font-semibold hover:text-orange-500">Plan Outing</a>
-                <a href="/swipe" className="hover:text-orange-500">Discover</a>
-                <a href="/friends" className="hover:text-orange-500">Friends</a>
-                <a href="/profile" className="hover:text-orange-500">Profile</a>
-                <DarkModeToggle />
-              </div>
-            </nav>
+            <NavBar />
             <main className="max-w-2xl mx-auto px-4 py-8">{children}</main>
           </AuthProvider>
         </DarkModeProvider>

@@ -62,7 +62,7 @@ class Settings(BaseSettings):
         return url
 
     # LLM Settings
-    primary_model: str = "anthropic:claude-haiku-3-5"
+    primary_model: str = "anthropic:claude-haiku-4-5-20251001"
     fallback_model: str = "google-gla:gemini-2.5-flash"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
