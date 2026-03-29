@@ -23,7 +23,7 @@ export default function Home() {
         <a href="/plan" className="bg-orange-500 text-white rounded-lg py-3 px-6 font-semibold hover:bg-orange-600 text-center">
           🗓 Plan an Outing
         </a>
-        <a href="/swipe" className="bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] rounded-lg py-3 px-6 font-semibold hover:border-orange-400 text-center">
+        <a href="/discover" className="bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] rounded-lg py-3 px-6 font-semibold hover:border-orange-400 text-center">
           ✨ Discover Hangouts
         </a>
         <a href="/friends" className="bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] rounded-lg py-3 px-6 font-semibold hover:border-orange-400 text-center">
