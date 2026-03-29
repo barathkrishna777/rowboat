@@ -57,7 +57,7 @@ const BUDGET_OPTIONS: { label: string; value: "$" | "$$" | "$$$" | "$$$$" }[] = 
 function StepBadge({ n, active, done }: { n: number; active: boolean; done: boolean }) {
   return (
     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0
-      ${done ? "bg-green-500 text-white" : active ? "bg-orange-500 text-white" : "bg-gray-200 text-gray-500"}`}>
+      ${done ? "bg-green-500 text-white" : active ? "bg-orange-500 text-white" : "bg-gray-200 text-gray-600 dark:bg-slate-600 dark:text-slate-200"}`}>
       {done ? "✓" : n}
     </div>
   );
@@ -67,7 +67,7 @@ function StepHeader({ step, current, title }: { step: number; current: number; t
   return (
     <div className="flex items-center gap-3 mb-5">
       <StepBadge n={step} active={step === current} done={step < current} />
-      <h2 className="text-lg font-bold">{title}</h2>
+      <h2 className="text-lg font-bold text-[var(--text)]">{title}</h2>
     </div>
   );
 }
@@ -82,7 +82,7 @@ function Toggle({ options, value, onChange }: {
       {options.map(o => (
         <button key={o} type="button" onClick={() => toggle(o)}
           className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors
-            ${value.includes(o) ? "bg-orange-500 text-white border-orange-500" : "bg-white text-gray-700 border-gray-300 hover:border-orange-300"}`}>
+            ${value.includes(o) ? "bg-orange-500 text-white border-orange-500" : "bg-[var(--surface)] text-[var(--text)] border-[var(--border)] hover:border-orange-400 dark:hover:border-orange-500"}`}>
           {o}
         </button>
       ))}
@@ -94,35 +94,45 @@ function VenueCard({ venue, score, passed, selected, onSelect, violation }: {
   venue: Venue; score?: number; passed?: boolean; selected?: boolean;
   onSelect?: () => void; violation?: string[];
 }) {
-  const badge = score !== undefined
-    ? score >= 70 ? "bg-green-100 text-green-700" : score >= 40 ? "bg-orange-100 text-orange-700" : "bg-red-100 text-red-700"
-    : "bg-gray-100 text-gray-600";
+  // score is 0–1 from the backend
+  const pct = score !== undefined ? Math.round(score * 100) : undefined;
+  const badge = pct !== undefined
+    ? pct >= 70
+      ? "bg-green-100 text-green-800 dark:bg-emerald-900/55 dark:text-emerald-200"
+      : pct >= 40
+        ? "bg-orange-100 text-orange-900 dark:bg-orange-950/55 dark:text-orange-200"
+        : "bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-200"
+    : "bg-gray-200 text-gray-800 dark:bg-slate-600 dark:text-slate-100";
 
   return (
     <div onClick={onSelect} className={`border rounded-xl p-4 transition-all cursor-pointer
-      ${selected ? "border-orange-400 bg-orange-50 shadow-sm" : passed === false ? "opacity-60 border-red-200 bg-red-50" : "border-gray-200 bg-white hover:border-orange-300"}
+      ${selected
+        ? "border-orange-400 bg-orange-50 text-neutral-900 shadow-sm dark:border-orange-500 dark:bg-orange-950/45 dark:text-orange-50"
+        : passed === false
+          ? "opacity-60 border-red-200 bg-red-50 text-neutral-900 dark:border-red-800 dark:bg-red-950/35 dark:text-red-50"
+          : "border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:border-orange-400 dark:hover:border-orange-500"}
     `}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-gray-900 truncate">{venue.name}</div>
-          <div className="text-sm text-gray-500">{venue.address}</div>
-          <div className="text-xs text-gray-400 mt-0.5">{venue.categories?.join(", ")}</div>
+          <div className="font-semibold truncate">{venue.name}</div>
+          <div className="text-sm text-[var(--text-muted)]">{venue.address}</div>
+          <div className="text-xs text-[var(--text-muted)] mt-0.5 opacity-90">{venue.categories?.join(", ")}</div>
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
-          {score !== undefined && (
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${badge}`}>{score}%</span>
+          {pct !== undefined && (
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${badge}`}>{pct}%</span>
           )}
-          {venue.price_tier && <span className="text-sm">{venue.price_tier}</span>}
-          {venue.rating && <span className="text-xs text-yellow-600">⭐ {venue.rating}</span>}
+          {venue.price_tier && <span className="text-sm text-[var(--text-muted)] font-medium">{venue.price_tier}</span>}
+          {venue.rating && <span className="text-xs text-amber-700 dark:text-amber-300">⭐ {venue.rating}</span>}
         </div>
       </div>
       {violation && violation.length > 0 && (
-        <p className="text-xs text-red-500 mt-1">⛔ {violation.join(" · ")}</p>
+        <p className="text-xs text-red-500 dark:text-red-400 mt-1">⛔ {violation.join(" · ")}</p>
       )}
       {venue.url && (
         <a href={venue.url} target="_blank" rel="noopener noreferrer"
           onClick={e => e.stopPropagation()}
-          className="text-xs text-orange-500 hover:underline mt-1 block">
+          className="text-xs text-orange-700 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-300 hover:underline mt-1 block">
           View details →
         </a>
       )}
@@ -134,7 +144,7 @@ function VenueCard({ venue, score, passed, selected, onSelect, violation }: {
 
 export default function PlanPage() {
   return (
-    <Suspense fallback={<p className="text-center mt-20">Loading planner…</p>}>
+    <Suspense fallback={<p className="text-center mt-20 text-[var(--text)]">Loading planner…</p>}>
       <PlanPageInner />
     </Suspense>
   );
@@ -363,7 +373,7 @@ function PlanPageInner() {
 
   // ── Render ───────────────────────────────────────────────────────────
 
-  if (loading || !user) return <p className="text-center mt-20">Loading...</p>;
+  if (loading || !user) return <p className="text-center mt-20 text-[var(--text)]">Loading...</p>;
 
   const steps = [
     "Your Group", "Preferences", "Find Venues", "Rank & Score", "Review & Book", "Feedback"
@@ -375,8 +385,8 @@ function PlanPageInner() {
       <div className="flex items-center gap-1 mb-8">
         {steps.map((label, i) => (
           <div key={i} className="flex-1 flex flex-col items-center gap-1">
-            <div className={`h-1.5 w-full rounded-full transition-colors ${i + 1 <= step ? "bg-orange-500" : "bg-gray-200"}`} />
-            <span className="text-[10px] text-gray-400 hidden sm:block text-center leading-tight">{label}</span>
+            <div className={`h-1.5 w-full rounded-full transition-colors ${i + 1 <= step ? "bg-orange-500" : "bg-gray-200 dark:bg-slate-600"}`} />
+            <span className="text-[10px] text-[var(--text-muted)] hidden sm:block text-center leading-tight">{label}</span>
           </div>
         ))}
       </div>
@@ -427,41 +437,85 @@ function PlanPageInner() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                <p className="font-semibold text-green-800">{group.name}</p>
-                <p className="text-sm text-green-600">{members.length} member{members.length !== 1 ? "s" : ""}</p>
+              <div className="bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-lg p-3">
+                <p className="font-semibold text-green-900 dark:text-green-200">{group.name}</p>
+                <p className="text-sm text-green-800 dark:text-green-300">{members.length} member{members.length !== 1 ? "s" : ""}</p>
               </div>
 
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-2">Members</p>
+                <p className="text-sm font-medium text-[var(--text-muted)] mb-2">Members</p>
                 {members.map((m, i) => (
-                  <div key={i} className="flex items-center gap-2 py-1.5 border-b border-gray-100 last:border-0">
+                  <div key={i} className="flex items-center gap-2 py-1.5 border-b border-gray-100 dark:border-slate-700 last:border-0">
                     <div className="w-7 h-7 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold">
                       {m.name[0]}
                     </div>
                     <div>
-                      <div className="text-sm font-medium">{m.name}</div>
-                      <div className="text-xs text-gray-400">{m.email}</div>
+                      <div className="text-sm font-medium text-[var(--text)]">{m.name}</div>
+                      <div className="text-xs text-[var(--text-muted)]">{m.email}</div>
                     </div>
                   </div>
                 ))}
               </div>
 
-              <div className="border rounded-lg p-3 space-y-2">
-                <p className="text-sm font-medium text-gray-600">Add a member</p>
+              <div className="border border-[var(--border)] rounded-lg p-3 space-y-2">
+                <p className="text-sm font-medium text-[var(--text-muted)]">Add a member</p>
                 <input value={newMemberName} onChange={e => setNewMemberName(e.target.value)}
                   placeholder="Name" className="w-full border border-gray-200 dark:border-slate-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500" />
                 <input value={newMemberEmail} onChange={e => setNewMemberEmail(e.target.value)}
                   placeholder="Email" type="email" className="w-full border border-gray-200 dark:border-slate-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500" />
                 <button onClick={handleAddMember} disabled={!newMemberName || !newMemberEmail || groupLoading}
-                  className="w-full border border-orange-400 text-orange-500 rounded py-1.5 text-sm font-medium hover:bg-orange-50 disabled:opacity-50">
+                  className="w-full border border-orange-400 text-orange-700 dark:text-orange-400 rounded py-1.5 text-sm font-medium hover:bg-orange-50 dark:hover:bg-orange-950/40 disabled:opacity-50">
                   + Add Member
                 </button>
               </div>
 
-              <button onClick={() => setStep(2)}
-                className="w-full bg-orange-500 text-white rounded-lg py-2.5 font-semibold hover:bg-orange-600">
-                Continue →
+              {/* ── Two-path choice ── */}
+              <p className="text-sm font-semibold text-[var(--text-muted)] text-center pt-1">How do you want to plan?</p>
+
+              {/* Path A — AI orchestrator */}
+              <div className="rounded-xl border border-orange-200 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/40 p-4 space-y-3">
+                <div>
+                  <p className="font-bold text-orange-700 dark:text-orange-300">🚣 Let Rowboat do the rest</p>
+                  <p className="text-sm text-orange-600 dark:text-orange-400 mt-0.5">
+                    Describe the vibe — AI picks venues, times &amp; plan for you.
+                  </p>
+                </div>
+                <input
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="What kind of outing? (e.g. dinner and bowling)"
+                  className="w-full border border-orange-200 dark:border-orange-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+                <input
+                  value={location}
+                  onChange={e => setLocation(e.target.value)}
+                  placeholder="Location (e.g. Pittsburgh, PA)"
+                  className="w-full border border-orange-200 dark:border-orange-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+                <button
+                  onClick={handleOrchestrate}
+                  disabled={!searchQuery || orchestrating}
+                  className="w-full bg-orange-500 text-white rounded-xl py-3 font-bold text-base hover:bg-orange-600 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                >
+                  {orchestrating
+                    ? <><span className="animate-spin inline-block">⏳</span> Rowboat is planning…</>
+                    : <>🚣 Plan our outing →</>}
+                </button>
+              </div>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-gray-200 dark:bg-slate-700" />
+                <span className="text-xs text-[var(--text-muted)] shrink-0">or</span>
+                <div className="flex-1 h-px bg-gray-200 dark:bg-slate-700" />
+              </div>
+
+              {/* Path B — manual step-by-step */}
+              <button
+                onClick={() => setStep(2)}
+                className="w-full border border-[var(--border)] rounded-xl py-3 font-semibold text-[var(--text)] hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+              >
+                Customize step by step →
               </button>
             </div>
           )}
@@ -474,44 +528,44 @@ function PlanPageInner() {
           <StepHeader step={2} current={step} title="Preferences" />
           <div className="space-y-5">
             <div>
-              <p className="text-sm font-medium text-gray-600 mb-2">Cuisines</p>
+              <p className="text-sm font-medium text-[var(--text-muted)] mb-2">Cuisines</p>
               <Toggle options={CUISINES} value={cuisines} onChange={setCuisines} />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-600 mb-2">Activities</p>
+              <p className="text-sm font-medium text-[var(--text-muted)] mb-2">Activities</p>
               <Toggle options={ACTIVITIES} value={activities} onChange={setActivities} />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-600 mb-2">Dietary restrictions</p>
+              <p className="text-sm font-medium text-[var(--text-muted)] mb-2">Dietary restrictions</p>
               <Toggle options={DIETARY} value={dietary} onChange={setDietary} />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-600 mb-2">Budget per person</p>
+              <p className="text-sm font-medium text-[var(--text-muted)] mb-2">Budget per person</p>
               <div className="grid grid-cols-2 gap-2">
                 {BUDGET_OPTIONS.map(opt => (
                   <button key={opt.value} type="button" onClick={() => setBudget(opt.value)}
                     className={`py-2 px-3 rounded-lg border text-sm font-medium text-left transition-colors
-                      ${budget === opt.value ? "border-orange-400 bg-orange-50 text-orange-700" : "border-gray-200 text-gray-600 hover:border-orange-200"}`}>
+                      ${budget === opt.value ? "border-orange-400 bg-orange-50 text-orange-900 dark:bg-orange-950/45 dark:text-orange-100" : "border-[var(--border)] text-[var(--text)] hover:border-orange-300 dark:hover:border-orange-600"}`}>
                     {opt.label}
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-600 mb-1">Dealbreakers (one per line)</p>
+              <p className="text-sm font-medium text-[var(--text-muted)] mb-1">Dealbreakers (one per line)</p>
               <textarea value={dealbreakers} onChange={e => setDealbreakers(e.target.value)}
                 rows={2} placeholder={"No loud places\nMust have parking"}
                 className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-400" />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-600 mb-1">Preferred neighborhoods</p>
+              <p className="text-sm font-medium text-[var(--text-muted)] mb-1">Preferred neighborhoods</p>
               <input value={neighborhoods} onChange={e => setNeighborhoods(e.target.value)}
                 placeholder="Oakland, Shadyside, Squirrel Hill"
                 className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-400" />
             </div>
             <div className="flex gap-3">
               <button onClick={() => setStep(1)}
-                className="flex-1 border border-gray-300 rounded-lg py-2.5 text-gray-600 font-semibold hover:bg-gray-50">
+                className="flex-1 border border-[var(--border)] rounded-lg py-2.5 text-[var(--text)] font-semibold hover:bg-black/5 dark:hover:bg-white/10">
                 ← Back
               </button>
               <button onClick={() => setStep(3)}
@@ -540,7 +594,7 @@ function PlanPageInner() {
           {/* Two paths: manual search or orchestrate */}
           <div className="flex gap-3 mb-6">
             <button onClick={() => setStep(2)}
-              className="border border-gray-300 rounded-lg px-4 py-2.5 text-gray-600 font-semibold hover:bg-gray-50">
+              className="border border-[var(--border)] rounded-lg px-4 py-2.5 text-[var(--text)] font-semibold hover:bg-black/5 dark:hover:bg-white/10">
               ← Back
             </button>
             <button onClick={handleSearch} disabled={!searchQuery || searching}
@@ -549,10 +603,10 @@ function PlanPageInner() {
             </button>
           </div>
 
-          <div className="border-t border-gray-200 pt-4">
-            <p className="text-xs text-gray-400 text-center mb-3">or skip all steps</p>
+          <div className="border-t border-[var(--border)] pt-4">
+            <p className="text-xs text-[var(--text-muted)] text-center mb-3">or skip all steps</p>
             <button onClick={handleOrchestrate} disabled={!searchQuery || orchestrating}
-              className="w-full border-2 border-orange-400 text-orange-600 rounded-lg py-2.5 font-semibold hover:bg-orange-50 disabled:opacity-50 flex items-center justify-center gap-2">
+              className="w-full border-2 border-orange-400 text-orange-700 dark:text-orange-400 rounded-lg py-2.5 font-semibold hover:bg-orange-50 dark:hover:bg-orange-950/40 disabled:opacity-50 flex items-center justify-center gap-2">
               {orchestrating ? (
                 <>
                   <span className="animate-spin">⚙</span>
@@ -562,13 +616,13 @@ function PlanPageInner() {
                 <>✨ Let AI plan everything</>
               )}
             </button>
-            <p className="text-xs text-gray-400 text-center mt-1">
+            <p className="text-xs text-[var(--text-muted)] text-center mt-1">
               Searches venues, checks schedules, and picks the best match — automatically
             </p>
           </div>
 
           {orchestrating && (
-            <div className="mt-4 bg-orange-50 border border-orange-200 rounded-lg p-4 text-sm text-orange-700 space-y-1">
+            <div className="mt-4 bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-800 rounded-lg p-4 text-sm text-orange-900 dark:text-orange-200 space-y-1">
               <p className="font-semibold">AI Orchestrator running…</p>
               <p>🔍 Searching Yelp, Eventbrite &amp; Ticketmaster</p>
               <p>📅 Finding available time slots</p>
@@ -580,14 +634,14 @@ function PlanPageInner() {
           {/* Search results */}
           {searchResult && !searching && (
             <div className="mt-4 space-y-3">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
+              <div className="bg-blue-50 dark:bg-blue-950/45 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm text-blue-900 dark:text-blue-100">
                 <p className="font-semibold">Agent Summary</p>
                 <p>{searchResult.summary}</p>
                 {searchResult.sources_searched.length > 0 && (
-                  <p className="text-xs mt-1 text-blue-500">Sources: {searchResult.sources_searched.join(", ")}</p>
+                  <p className="text-xs mt-1 text-blue-800 dark:text-blue-200">Sources: {searchResult.sources_searched.join(", ")}</p>
                 )}
               </div>
-              <p className="text-sm font-medium text-gray-600 dark:text-slate-300">
+              <p className="text-sm font-medium text-[var(--text-muted)]">
                 {searchResult.venues.length} venue{searchResult.venues.length !== 1 ? "s" : ""} found
               </p>
               {searchResult.venues.length === 0 ? (
@@ -628,19 +682,19 @@ function PlanPageInner() {
           <StepHeader step={4} current={step} title="Ranked Recommendations" />
 
           {ranking && (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-[var(--text-muted)]">
               <p className="animate-pulse">Recommendation Agent scoring venues…</p>
             </div>
           )}
 
           {recommendation && !ranking && (
             <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
+              <div className="bg-blue-50 dark:bg-blue-950/45 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm text-blue-900 dark:text-blue-100">
                 <p className="font-semibold">AI Recommendation</p>
                 <p>{recommendation.summary}</p>
               </div>
 
-              <p className="text-sm font-medium text-gray-600">
+              <p className="text-sm font-medium text-[var(--text-muted)]">
                 {recommendation.ranked_venues.length} venues passed · {recommendation.rejected_venues.length} filtered out
               </p>
 
@@ -655,7 +709,7 @@ function PlanPageInner() {
 
               {recommendation.rejected_venues.length > 0 && (
                 <details className="mt-2">
-                  <summary className="text-sm text-gray-400 cursor-pointer">
+                  <summary className="text-sm text-[var(--text-muted)] cursor-pointer hover:text-[var(--text)]">
                     {recommendation.rejected_venues.length} filtered out (click to show)
                   </summary>
                   <div className="mt-2 space-y-2">
@@ -669,7 +723,7 @@ function PlanPageInner() {
 
               <div className="flex gap-3">
                 <button onClick={() => setStep(3)}
-                  className="border border-gray-300 rounded-lg px-4 py-2.5 text-gray-600 font-semibold hover:bg-gray-50">
+                  className="border border-[var(--border)] rounded-lg px-4 py-2.5 text-[var(--text)] font-semibold hover:bg-black/5 dark:hover:bg-white/10">
                   ← Back
                 </button>
                 <button onClick={() => setStep(5)} disabled={!selectedVenue}
@@ -688,39 +742,41 @@ function PlanPageInner() {
           <StepHeader step={5} current={step} title="Review & Book" />
 
           {orchestratorResult && (
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4 space-y-2">
-              <p className="font-semibold text-orange-800">AI Orchestrator Result</p>
-              <p className="text-sm text-orange-700">{orchestratorResult.itinerary_summary}</p>
+            <div className="bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-700 rounded-lg p-4 mb-4 space-y-2">
+              <p className="font-semibold text-orange-950 dark:text-orange-200">AI Orchestrator Result</p>
+              <p className="text-sm text-orange-950 dark:text-orange-200">{orchestratorResult.itinerary_summary}</p>
               {orchestratorResult.estimated_cost_per_person && (
-                <p className="text-sm text-orange-700">💵 {orchestratorResult.estimated_cost_per_person}</p>
+                <p className="text-sm text-orange-950 dark:text-orange-200">💵 {orchestratorResult.estimated_cost_per_person}</p>
               )}
               {orchestratorResult.rag_insights && (
-                <p className="text-xs text-orange-600 italic">💡 {orchestratorResult.rag_insights}</p>
+                <p className="text-xs font-medium text-orange-950 dark:text-orange-100 italic">💡 {orchestratorResult.rag_insights}</p>
               )}
             </div>
           )}
 
           {selectedVenue && (
-            <div className="border border-orange-300 bg-white rounded-xl p-5 mb-4 space-y-1.5">
+            <div className="border border-orange-300 dark:border-orange-600 bg-[var(--surface)] text-[var(--text)] rounded-xl p-5 mb-4 space-y-1.5">
               <div className="font-bold text-lg">{selectedVenue.name}</div>
               {"address" in selectedVenue && selectedVenue.address && (
-                <div className="text-sm text-gray-500">📍 {selectedVenue.address}</div>
+                <div className="text-sm text-[var(--text-muted)]">📍 {selectedVenue.address}</div>
               )}
               {"price_tier" in selectedVenue && selectedVenue.price_tier && (
-                <div className="text-sm">💰 {selectedVenue.price_tier}</div>
+                <div className="text-sm text-[var(--text-muted)]">💰 {selectedVenue.price_tier}</div>
               )}
               {"rating" in selectedVenue && selectedVenue.rating && (
-                <div className="text-sm text-yellow-600">⭐ {selectedVenue.rating}</div>
+                <div className="text-sm text-amber-700 dark:text-amber-300">⭐ {selectedVenue.rating}</div>
               )}
               {"score" in selectedVenue && (
-                <div className="text-sm text-green-600 font-medium">{(selectedVenue as ScoredVenue).score}% match</div>
+                <div className="text-sm text-green-700 dark:text-green-400 font-medium">
+                  {Math.round((selectedVenue as ScoredVenue).score * 100)}% match
+                </div>
               )}
             </div>
           )}
 
           {orchestratorResult?.recommended_slot && (
-            <div className="border border-gray-200 rounded-xl p-4 mb-4">
-              <p className="font-medium text-gray-700 mb-1">Suggested time</p>
+            <div className="border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] rounded-xl p-4 mb-4">
+              <p className="font-medium text-[var(--text-muted)] mb-1">Suggested time</p>
               {(() => {
                 const slot = orchestratorResult.recommended_slot as Record<string, string>;
                 return (
@@ -734,7 +790,7 @@ function PlanPageInner() {
           )}
 
           {members.length > 0 && (
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-[var(--text-muted)] mb-4">
               Invites will be sent to: {members.map(m => m.email).filter(Boolean).join(", ")}
             </p>
           )}
@@ -742,7 +798,7 @@ function PlanPageInner() {
           {!booked ? (
             <div className="flex gap-3">
               <button onClick={() => setStep(4)}
-                className="border border-gray-300 rounded-lg px-4 py-2.5 text-gray-600 font-semibold hover:bg-gray-50">
+                className="border border-[var(--border)] rounded-lg px-4 py-2.5 text-[var(--text)] font-semibold hover:bg-black/5 dark:hover:bg-white/10">
                 ← Back
               </button>
               <button onClick={handleBook} disabled={booking}
@@ -753,8 +809,8 @@ function PlanPageInner() {
           ) : (
             <div className="text-center space-y-3">
               <div className="text-4xl">🎉</div>
-              <p className="text-xl font-bold text-green-700">Outing Booked!</p>
-              <p className="text-gray-500 text-sm">Calendar invites sent to your group.</p>
+              <p className="text-xl font-bold text-green-700 dark:text-green-400">Outing Booked!</p>
+              <p className="text-[var(--text-muted)] text-sm">Calendar invites sent to your group.</p>
               <button onClick={() => setStep(6)}
                 className="w-full bg-orange-500 text-white rounded-lg py-2.5 font-semibold hover:bg-orange-600">
                 Leave Feedback →
@@ -772,21 +828,21 @@ function PlanPageInner() {
           {!feedbackDone ? (
             <div className="space-y-5">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-2">Overall rating</p>
+                <p className="text-sm font-medium text-[var(--text-muted)] mb-2">Overall rating</p>
                 <div className="flex gap-2">
                   {[1, 2, 3, 4, 5].map(n => (
                     <button key={n} onClick={() => setOverallRating(n)}
-                      className={`text-2xl transition-transform ${n <= overallRating ? "text-yellow-400 scale-110" : "text-gray-200"}`}>
+                      className={`text-2xl transition-transform ${n <= overallRating ? "text-yellow-400 scale-110" : "text-gray-300 dark:text-slate-600"}`}>
                       ★
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Tell us about your experience</p>
+                <p className="text-sm font-medium text-[var(--text-muted)] mb-1">Tell us about your experience</p>
                 <textarea value={feedbackText} onChange={e => setFeedbackText(e.target.value)}
                   rows={4} placeholder="What did you enjoy? What could be better? Would you do this again?"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-orange-500" />
+                  className="w-full border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-400" />
               </div>
               <button onClick={() => setFeedbackDone(true)}
                 className="w-full bg-orange-500 text-white rounded-lg py-2.5 font-semibold hover:bg-orange-600">
@@ -797,9 +853,9 @@ function PlanPageInner() {
             <div className="text-center space-y-4 py-6">
               <div className="text-4xl">🙏</div>
               <p className="text-xl font-bold">Thanks for the feedback!</p>
-              <p className="text-gray-500 text-sm">Your input helps improve future outings.</p>
+              <p className="text-[var(--text-muted)] text-sm">Your input helps improve future outings.</p>
               <div className="flex gap-3">
-                <a href="/" className="flex-1 border border-gray-300 rounded-lg py-2.5 font-semibold text-center text-gray-600 hover:bg-gray-50">
+                <a href="/" className="flex-1 border border-[var(--border)] rounded-lg py-2.5 font-semibold text-center text-[var(--text)] hover:bg-black/5 dark:hover:bg-white/10">
                   Home
                 </a>
                 <a href="/plan" className="flex-1 bg-orange-500 text-white rounded-lg py-2.5 font-semibold text-center hover:bg-orange-600">

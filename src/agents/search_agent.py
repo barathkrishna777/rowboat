@@ -242,10 +242,21 @@ async def _run_parallel_search(
         sources_searched.append(source_name)
         all_venues.extend(venues)
 
+    # Filter out likely-closed venues from real APIs:
+    # - review_count < 5 from a real API source is a strong signal the place is gone
+    # - LLM-sourced venues have review_count=None so they pass through untouched
+    MIN_REVIEWS = 5
+    active_venues: list[Venue] = []
+    for v in all_venues:
+        if v.review_count is not None and v.review_count < MIN_REVIEWS:
+            logger.debug(f"[Search] Dropping low-review venue: {v.name} ({v.review_count} reviews)")
+            continue
+        active_venues.append(v)
+
     # Deduplicate by name (case-insensitive)
     seen_names: set[str] = set()
     unique_venues: list[Venue] = []
-    for v in all_venues:
+    for v in active_venues:
         key = v.name.lower().strip()
         if key not in seen_names:
             seen_names.add(key)

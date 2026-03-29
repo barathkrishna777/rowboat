@@ -79,7 +79,8 @@ def _place_to_venue(place: dict) -> Venue:
 
 async def _search_places_api(query: str, location: str, limit: int) -> list[Venue]:
     """Try the Google Places (New) API."""
-    api_key = settings.google_api_key or settings.gemini_api_key
+    # Prefer a dedicated Places key; fall back to the shared Google/Gemini key.
+    api_key = settings.google_places_api_key or settings.google_api_key or settings.gemini_api_key
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": api_key,
@@ -87,7 +88,7 @@ async def _search_places_api(query: str, location: str, limit: int) -> list[Venu
             "places.id,places.displayName,places.formattedAddress,"
             "places.location,places.types,places.rating,"
             "places.userRatingCount,places.priceLevel,"
-            "places.googleMapsUri,places.primaryType"
+            "places.googleMapsUri,places.primaryType,places.businessStatus"
         ),
     }
     body = {
@@ -104,7 +105,11 @@ async def _search_places_api(query: str, location: str, limit: int) -> list[Venu
         )
         resp.raise_for_status()
         data = resp.json()
-    return [_place_to_venue(p) for p in data.get("places", [])]
+    return [
+        _place_to_venue(p)
+        for p in data.get("places", [])
+        if p.get("businessStatus", "OPERATIONAL") == "OPERATIONAL"  # skip closed/temp-closed
+    ]
 
 
 async def _search_via_llm(query: str, location: str, limit: int) -> list[Venue]:
@@ -113,7 +118,15 @@ async def _search_via_llm(query: str, location: str, limit: int) -> list[Venue]:
     Claude Haiku is used for speed — this is a simple list-generation task.
     Falls back to Gemini if no Anthropic key is available.
     """
-    prompt = f"""Find {limit} real, currently operating venues for: "{query}" in {location}.
+    prompt = f"""Find {limit} real venues for: "{query}" in {location}.
+
+CRITICAL requirements — only include venues that meet ALL of these:
+1. Still operating as of 2025-2026 (not permanently or temporarily closed)
+2. Have meaningful recent activity — active customer reviews from 2024 or later
+3. Have a real street address you are confident is correct
+4. Have a rating of at least 3.5/5 based on real reviews
+
+Do NOT include: permanently closed businesses, venues you're unsure about, ghost kitchens without a real dine-in presence, or businesses with very few reviews.
 
 Return ONLY a valid JSON array. Each object must have these exact fields:
 - "name": string (real business name)
@@ -208,7 +221,7 @@ async def search_google_places(
     Returns:
         List of Venue objects.
     """
-    api_key = settings.google_api_key or settings.gemini_api_key
+    api_key = settings.google_places_api_key or settings.google_api_key or settings.gemini_api_key
     if not api_key and not settings.anthropic_api_key:
         return []
 

@@ -83,20 +83,20 @@ export default function SwipePage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  if (loading || !user) return <p className="text-center mt-20">Loading...</p>;
+  if (loading || !user) return <p className="text-center mt-20 text-[var(--text)]">Loading...</p>;
 
   const card = feed[index];
 
   return (
     <div className="max-w-md mx-auto">
-      <h1 className="text-2xl font-bold mb-6 text-center">Discover Hangouts</h1>
+      <h1 className="text-2xl font-bold mb-6 text-center text-[var(--text)]">Discover Hangouts</h1>
 
       {/* Suggested matches banner */}
       {matches.length > 0 && (
         <div className="mb-6">
           {matches.map((m) => (
-            <div key={m.id} className="bg-green-50 border border-green-300 rounded-lg p-4 mb-2">
-              <p className="font-semibold text-green-800">Match found! ({m.member_user_ids.length} people, score: {m.score})</p>
+            <div key={m.id} className="bg-green-50 dark:bg-green-950/50 border border-green-300 dark:border-green-700 rounded-lg p-4 mb-2">
+              <p className="font-semibold text-green-800 dark:text-green-300">🎉 Match found! ({m.member_user_ids.length} people interested)</p>
               <a
                 href={m.group_id ? `/plan?group_id=${m.group_id}` : "#"}
                 onClick={!m.group_id ? async (e) => {
@@ -114,16 +114,18 @@ export default function SwipePage() {
 
       {/* Swipe card */}
       {card ? (
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+        <div className="bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] rounded-2xl p-6 shadow-sm">
           <h2 className="text-xl font-bold mb-2">{card.title}</h2>
-          {card.description && <p className="text-gray-600 mb-3">{card.description}</p>}
+          {card.description && (
+            <p className="text-[var(--text-muted)] mb-3 leading-relaxed">{card.description}</p>
+          )}
           {card.location_area && (
-            <p className="text-sm text-gray-500 mb-2">{card.location_area}</p>
+            <p className="text-sm text-[var(--text-muted)] mb-2">📍 {card.location_area}</p>
           )}
           {card.tags.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-4">
               {card.tags.map((tag) => (
-                <span key={tag} className="bg-orange-50 text-orange-600 text-xs font-semibold px-3 py-1 rounded-full">
+                <span key={tag} className="bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 text-xs font-semibold px-3 py-1 rounded-full">
                   {tag}
                 </span>
               ))}
@@ -132,7 +134,7 @@ export default function SwipePage() {
           <div className="flex gap-4 mt-4">
             <button
               onClick={() => handleSwipe("pass")}
-              className="flex-1 border border-gray-300 rounded-lg py-3 font-semibold text-gray-500 hover:bg-gray-100"
+              className="flex-1 border border-[var(--border)] rounded-lg py-3 font-semibold text-[var(--text)] hover:bg-black/5 dark:hover:bg-white/10"
             >
               Pass
             </button>
@@ -140,20 +142,20 @@ export default function SwipePage() {
               onClick={() => handleSwipe("interested")}
               className="flex-1 bg-orange-500 text-white rounded-lg py-3 font-semibold hover:bg-orange-600"
             >
-              Interested
+              Interested ✓
             </button>
           </div>
-          <p className="text-xs text-gray-400 text-center mt-2">or use arrow keys</p>
+          <p className="text-xs text-[var(--text-muted)] text-center mt-2">or use arrow keys ← →</p>
         </div>
       ) : (
-        <div className="text-center text-gray-400 mt-12">
+        <div className="text-center text-[var(--text-muted)] mt-12">
           <p className="text-4xl mb-2">✨</p>
           <p>No more hangouts to discover right now.</p>
-          <button onClick={loadFeed} className="mt-4 text-orange-500 font-medium hover:text-orange-600">Refresh feed</button>
+          <button onClick={loadFeed} className="mt-4 text-orange-600 dark:text-orange-400 font-medium hover:text-orange-700 dark:hover:text-orange-300">Refresh feed</button>
         </div>
       )}
 
-      <p className="text-xs text-gray-400 text-center mt-6">
+      <p className="text-xs text-[var(--text-muted)] text-center mt-6">
         {feed.length > 0 && index < feed.length ? `${index + 1} / ${feed.length}` : ""}
       </p>
     </div>

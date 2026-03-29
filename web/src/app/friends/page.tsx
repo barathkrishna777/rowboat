@@ -58,32 +58,32 @@ export default function FriendsPage() {
     refresh();
   };
 
-  if (loading || !user) return <p className="text-center mt-20">Loading...</p>;
+  if (loading || !user) return <p className="text-center mt-20 text-[var(--text)]">Loading...</p>;
 
   return (
     <div className="max-w-md mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Friends</h1>
+      <h1 className="text-2xl font-bold mb-6 text-[var(--text)]">Friends</h1>
 
       {/* Add friend */}
       <form onSubmit={handleAdd} className="flex gap-2 mb-6">
         <input
           value={addValue} onChange={(e) => setAddValue(e.target.value)}
           placeholder="Email or username"
-          className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-orange-500"
+          className="flex-1 border border-gray-300 dark:border-slate-600 rounded-lg px-4 py-2 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-400"
         />
         <button type="submit" className="bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold hover:bg-orange-600">
           Add
         </button>
       </form>
-      {addError && <p className="text-red-500 text-sm mb-4">{addError}</p>}
-      {addSuccess && <p className="text-green-600 text-sm mb-4">{addSuccess}</p>}
+      {addError && <p className="text-red-600 dark:text-red-400 text-sm mb-4">{addError}</p>}
+      {addSuccess && <p className="text-green-700 dark:text-green-400 text-sm mb-4">{addSuccess}</p>}
 
       {/* Incoming requests */}
       {incoming.length > 0 && (
         <div className="mb-6">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase mb-2">Pending Requests</h2>
+          <h2 className="text-sm font-semibold text-[var(--text-muted)] uppercase mb-2">Pending Requests</h2>
           {incoming.map((req) => (
-            <div key={req.id} className="flex items-center justify-between bg-orange-50 border border-orange-200 rounded-lg p-3 mb-2">
+            <div key={req.id} className="flex items-center justify-between bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-800 rounded-lg p-3 mb-2 text-neutral-900 dark:text-orange-50">
               <span className="font-medium">{req.requester?.name || "Unknown"}</span>
               <div className="flex gap-2">
                 <button onClick={() => handleRespond(req.id, true)} className="text-green-600 font-semibold text-sm">Accept</button>
@@ -97,16 +97,16 @@ export default function FriendsPage() {
       {/* Friends list */}
       {friendsList.length > 0 ? (
         friendsList.map((f) => (
-          <div key={f.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3 mb-2">
+          <div key={f.id} className="flex items-center justify-between bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] rounded-lg p-3 mb-2">
             <div>
               <div className="font-medium">{f.name}</div>
-              <div className="text-sm text-gray-500">{f.email}</div>
+              <div className="text-sm text-[var(--text-muted)]">{f.email}</div>
             </div>
-            <button onClick={() => handleRemove(f.id)} className="text-red-400 text-sm hover:text-red-600">Remove</button>
+            <button onClick={() => handleRemove(f.id)} className="text-red-600 dark:text-red-400 text-sm hover:text-red-700 dark:hover:text-red-300">Remove</button>
           </div>
         ))
       ) : (
-        <p className="text-gray-400 text-center mt-8">No friends yet. Add someone above!</p>
+        <p className="text-[var(--text-muted)] text-center mt-8">No friends yet. Add someone above!</p>
       )}
     </div>
   );

@@ -4,17 +4,43 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 
 from src.agents.search_agent import SearchResult, run_search
 from src.agents.recommendation_agent import RecommendationResult, run_recommendation
 from src.agents.orchestrator_agent import (
     OrchestratorPlan, QuickPlanRequest, run_orchestrator,
 )
-from src.models.event import Venue
+from src.models.event import ScoredVenue, Venue
 from src.models.user import UserPreferences, BudgetTier, DietaryRestriction
 from src.models.constraints import ConstraintSet
 
 router = APIRouter()
+
+
+def _flatten_scored_venue(sv: ScoredVenue) -> dict:
+    """Flatten nested ScoredVenue into the flat shape the frontend expects.
+
+    The Python model stores venue data in a nested ``venue`` field; the
+    TypeScript interface expects all venue fields at the top level alongside
+    ``score``, ``passed_hard_constraints``, and ``violation_reasons``.
+    """
+    venue_data = sv.venue.model_dump(exclude_none=True)
+    has_violation = "⚠️" in sv.explanation
+    if has_violation:
+        violation_reasons = [
+            v.strip() for v in sv.explanation.split("⚠️")[-1].split(";") if v.strip()
+        ]
+    else:
+        violation_reasons = []
+    return {
+        **venue_data,
+        "score": sv.score,
+        "explanation": sv.explanation,
+        "passed_hard_constraints": not has_violation,
+        "violation_reasons": violation_reasons,
+        "score_breakdown": sv.score_breakdown,
+    }
 
 
 class SearchRequest(BaseModel):
@@ -92,7 +118,12 @@ async def recommend_venues(request: RecommendRequest):
             constraint_set=constraint_set,
             group_member_names=request.member_names,
         )
-        return result
+        return JSONResponse(content={
+            "ranked_venues": [_flatten_scored_venue(v) for v in result.ranked_venues],
+            "rejected_venues": [_flatten_scored_venue(v) for v in result.rejected_venues],
+            "summary": result.summary,
+            "constraint_summary": result.rag_insights,
+        })
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
