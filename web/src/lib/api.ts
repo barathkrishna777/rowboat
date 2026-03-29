@@ -309,10 +309,13 @@ export interface SuggestedMatch {
 }
 
 export interface PresetCriteria {
-  activities: string[];
-  cuisines: string[];
-  vibe: string[];
-  budget?: string;
+  cuisine_preferences: string[];
+  activity_preferences: string[];
+  dietary_restrictions: string[];
+  budget_max?: string;
+  dealbreakers: string[];
+  preferred_neighborhoods: string[];
+  accessibility_needs: string[];
 }
 
 export interface Preset {
@@ -358,5 +361,15 @@ export const presets = {
     request<Preset>(`/presets/${presetId}/favorite`, {
       method: "PATCH",
       body: JSON.stringify({ is_favorite: isFavorite }),
+    }),
+  parse: (text: string) =>
+    request<{
+      name_suggestion: string;
+      description_suggestion: string;
+      confidence: number;
+      criteria: PresetCriteria;
+    }>("/presets/parse", {
+      method: "POST",
+      body: JSON.stringify({ text }),
     }),
 };
