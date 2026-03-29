@@ -27,6 +27,7 @@ class Hangout(BaseModel):
     tags: list[str] = Field(default_factory=list)
     source: HangoutSource = HangoutSource.USER_CREATED
     created_by: str | None = None
+    match_reason: str | None = None
 
 
 class HangoutCreate(BaseModel):

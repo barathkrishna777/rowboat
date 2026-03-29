@@ -50,6 +50,7 @@ def _row_to_hangout(row: HangoutTable) -> Hangout:
         tags=json.loads(row.tags) if row.tags else [],
         source=HangoutSource(row.source),
         created_by=row.created_by,
+        match_reason=None,
     )
 
 

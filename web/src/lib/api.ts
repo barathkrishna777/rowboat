@@ -296,6 +296,7 @@ export interface Hangout {
   tags: string[];
   source: string;
   created_by?: string;
+  match_reason?: string;
 }
 
 export interface SuggestedMatch {

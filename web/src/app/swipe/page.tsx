@@ -127,6 +127,9 @@ export default function SwipePage() {
               ))}
             </div>
           )}
+          {presetId && card.match_reason && (
+            <p className="text-xs mb-2 text-orange-700 dark:text-orange-300">Why suggested: {card.match_reason}</p>
+          )}
           <div className="flex gap-4 mt-4">
             <button
               onClick={() => handleSwipe("pass")}
