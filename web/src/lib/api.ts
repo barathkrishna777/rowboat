@@ -308,13 +308,10 @@ export interface SuggestedMatch {
 }
 
 export interface PresetCriteria {
-  cuisine_preferences: string[];
-  activity_preferences: string[];
-  dietary_restrictions: string[];
-  budget_max?: string;
-  dealbreakers: string[];
-  preferred_neighborhoods: string[];
-  accessibility_needs: string[];
+  activities: string[];
+  cuisines: string[];
+  vibe: string[];
+  budget?: string;
 }
 
 export interface Preset {

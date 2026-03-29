@@ -15,13 +15,10 @@ class PresetSource(str, Enum):
 
 
 class PresetCriteria(BaseModel):
-    cuisine_preferences: list[str] = Field(default_factory=list)
-    activity_preferences: list[str] = Field(default_factory=list)
-    dietary_restrictions: list[str] = Field(default_factory=list)
-    budget_max: str | None = "$$"
-    dealbreakers: list[str] = Field(default_factory=list)
-    preferred_neighborhoods: list[str] = Field(default_factory=list)
-    accessibility_needs: list[str] = Field(default_factory=list)
+    activities: list[str] = Field(default_factory=list)
+    cuisines: list[str] = Field(default_factory=list)
+    vibe: list[str] = Field(default_factory=list)
+    budget: str | None = None
 
 
 class Preset(BaseModel):

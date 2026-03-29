@@ -142,18 +142,6 @@ class PresetTable(Base):
     description = Column(Text, nullable=True)
     source = Column(String, default="manual")  # manual | ai
     criteria = Column(Text, nullable=False)  # JSON object
+    is_favorite = Column(Integer, default=0)  # SQLite boolean
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-
-
-class PresetFavoriteTable(Base):
-    """User favorites for presets (works for both built-in and custom preset IDs)."""
-    __tablename__ = "preset_favorites"
-    __table_args__ = (
-        UniqueConstraint("user_id", "preset_id", name="uq_preset_favorite_user_preset"),
-    )
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    preset_id = Column(String, nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.now)
