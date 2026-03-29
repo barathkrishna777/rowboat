@@ -3,10 +3,10 @@
 import { useAuth } from "@/lib/auth-context";
 import { Preset, presets as presetsApi } from "@/lib/api";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import { criteriaToForm, formToCriteria, PresetEditor } from "../_components/preset-form";
 
-export default function ManualPresetPage() {
+function ManualPresetPageInner() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -129,5 +129,13 @@ export default function ManualPresetPage() {
         </button>
       </form>
     </div>
+  );
+}
+
+export default function ManualPresetPage() {
+  return (
+    <Suspense fallback={<p className="mt-20 text-center text-[var(--text)]">Loading...</p>}>
+      <ManualPresetPageInner />
+    </Suspense>
   );
 }
