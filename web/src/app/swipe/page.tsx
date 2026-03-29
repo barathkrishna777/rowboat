@@ -278,158 +278,231 @@ export default function SwipePage() {
           <BackButton />
           <GlowBlob />
 
-          {/* Blob area: heading + suggestion bubbles + keyword bubbles */}
-          <div className="relative h-80 flex items-center justify-center mt-8 mb-4">
-            {/* "Choose Your Vibe" heading -- shown when no keywords and not loading */}
-            {vibeKeywords.length === 0 && !vibeLoading && (
-              <h2 className="text-3xl sm:text-4xl font-bold text-center bg-gradient-to-r from-blue-300 via-orange-200 to-purple-300 bg-clip-text text-transparent relative z-10">
-                Choose Your Vibe
-              </h2>
-            )}
-
+          {/* ── Top: Venue card with full details ── */}
+          <div className="relative z-10 mt-10 flex-shrink-0">
             {vibeLoading && (
-              <div className="relative z-10 flex flex-col items-center gap-3">
-                <div className="h-10 w-10 border-3 border-white/30 border-t-orange-400 rounded-full animate-spin" />
+              <div className="flex flex-col items-center gap-3 py-16">
+                <div className="h-12 w-12 border-3 border-white/30 border-t-orange-400 rounded-full animate-spin" />
                 <p className="text-white/60 text-sm">Finding your vibe...</p>
               </div>
             )}
 
-            {/* Default suggestion bubbles -- transparent, scattered, floating */}
-            {availableSuggestions.map((suggestion, i) => {
-              const total = availableSuggestions.length;
-              const angle = (2 * Math.PI * i) / Math.max(total, 1) - Math.PI / 2;
-              const ring = i < 8 ? 0 : 1;
-              const radius = ring === 0 ? 120 : 85;
-              const x = Math.cos(angle) * radius;
-              const y = Math.sin(angle) * radius;
-              const size = 62 + ((i * 7) % 28);
-              const duration = 4 + (i % 4);
-              const delay = (i % 5) * 0.4;
-              return (
-                <button
-                  key={`sug-${suggestion}`}
-                  onClick={() => addKeyword(suggestion)}
-                  className="absolute z-10 rounded-full flex items-center justify-center text-center bg-white/[0.07] border border-white/[0.12] text-white/70 text-[11px] font-medium backdrop-blur-[2px] hover:bg-white/15 hover:text-white hover:border-white/30 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] transition-all duration-300 animate-float"
-                  style={{
-                    width: `${size}px`,
-                    height: `${size}px`,
-                    left: `calc(50% + ${x}px - ${size / 2}px)`,
-                    top: `calc(50% + ${y}px - ${size / 2}px)`,
-                    animationDuration: `${duration}s`,
-                    animationDelay: `${delay}s`,
-                  }}
-                >
-                  {suggestion}
-                </button>
-              );
-            })}
+            {vibeKeywords.length === 0 && !vibeLoading && rankedVenues.length === 0 && (
+              <div className="py-12 text-center">
+                <h2 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-blue-300 via-orange-200 to-purple-300 bg-clip-text text-transparent">
+                  Choose Your Vibe
+                </h2>
+                <p className="text-white/40 text-sm mt-2">Pick tags below or type your own</p>
+              </div>
+            )}
 
-            {/* Active keyword bubbles -- brighter, orbiting closer to center */}
-            {vibeKeywords.map((kw, i) => {
-              const angle = (2 * Math.PI * i) / Math.max(vibeKeywords.length, 1);
-              const radius = 55;
-              const x = Math.cos(angle) * radius;
-              const y = Math.sin(angle) * radius;
-              const duration = 5 + (i % 3);
-              return (
-                <button
-                  key={kw}
-                  onClick={() => removeKeyword(kw)}
-                  className="absolute z-20 bg-white/15 backdrop-blur-md text-white border border-white/30 rounded-full px-4 py-2 text-sm font-semibold shadow-[0_8px_24px_rgba(255,255,255,0.12)] hover:bg-red-500/30 hover:border-red-400/50 transition-all duration-300 animate-float"
-                  style={{
-                    left: `calc(50% + ${x}px - 40px)`,
-                    top: `calc(50% + ${y}px - 16px)`,
-                    animationDuration: `${duration}s`,
-                    animationDelay: `${i * 0.2}s`,
-                  }}
-                  title="Click to remove"
-                >
-                  {kw} <span className="ml-1 opacity-60">&times;</span>
-                </button>
-              );
-            })}
+            {rankedVenues.length > 0 && !vibeLoading && (
+              <>
+                {currentVenue ? (
+                  <div className="max-w-lg mx-auto bg-white border border-gray-200 rounded-3xl overflow-hidden shadow-xl text-black">
+                    {currentVenue.image_url && (
+                      <div className="relative w-full h-52 bg-gray-100">
+                        <img
+                          src={currentVenue.image_url}
+                          alt={currentVenue.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                        <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-sm text-white text-sm font-bold px-3 py-1 rounded-full">
+                          {Math.round((currentVenue.score || 0) * 100)}% match
+                        </div>
+                        {currentVenue.source && (
+                          <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm text-gray-700 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full">
+                            {currentVenue.source}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="p-5">
+                      <div className="flex items-start justify-between mb-1">
+                        <h2 className="text-xl font-bold leading-tight">{currentVenue.name}</h2>
+                        {!currentVenue.image_url && (
+                          <span className="flex-shrink-0 bg-orange-100 text-orange-600 text-sm font-bold px-3 py-1 rounded-full ml-2">
+                            {Math.round((currentVenue.score || 0) * 100)}%
+                          </span>
+                        )}
+                      </div>
+
+                      {currentVenue.address && (
+                        <p className="text-gray-500 text-sm mb-2 flex items-center gap-1">
+                          <span className="text-base">&#x1F4CD;</span> {currentVenue.address}
+                        </p>
+                      )}
+
+                      <div className="flex items-center gap-3 text-sm text-gray-500 mb-3">
+                        {currentVenue.rating != null && (
+                          <span className="flex items-center gap-1 font-semibold text-yellow-600">
+                            <span>&#x2B50;</span> {currentVenue.rating.toFixed(1)}
+                          </span>
+                        )}
+                        {currentVenue.review_count != null && currentVenue.review_count > 0 && (
+                          <span>({currentVenue.review_count.toLocaleString()} reviews)</span>
+                        )}
+                        {currentVenue.price_tier && (
+                          <span className="font-medium text-green-700">{currentVenue.price_tier}</span>
+                        )}
+                        {!currentVenue.image_url && currentVenue.source && (
+                          <span className="text-[10px] uppercase tracking-wider bg-gray-100 px-2 py-0.5 rounded-full font-semibold text-gray-500">
+                            {currentVenue.source}
+                          </span>
+                        )}
+                      </div>
+
+                      {currentVenue.explanation && (
+                        <p className="text-gray-600 text-sm mb-3 leading-relaxed">{currentVenue.explanation}</p>
+                      )}
+
+                      {currentVenue.categories && currentVenue.categories.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-3">
+                          {currentVenue.categories.map((cat: string) => (
+                            <span key={cat} className="bg-orange-50 text-orange-600 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                              {cat}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {currentVenue.url && (
+                        <a
+                          href={currentVenue.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-sm text-orange-500 hover:text-orange-600 font-medium mb-3 transition"
+                        >
+                          View on {currentVenue.source || "web"} <span className="text-xs">&#x2197;</span>
+                        </a>
+                      )}
+
+                      <div className="flex gap-3 mt-3">
+                        <button
+                          onClick={() => handleVibeSwipe(currentVenue, "pass")}
+                          className="flex-1 border-2 border-gray-300 rounded-xl py-3 font-semibold text-gray-500 hover:bg-gray-100 transition"
+                        >
+                          Pass
+                        </button>
+                        <button
+                          onClick={() => handleVibeSwipe(currentVenue, "interested")}
+                          className="flex-1 bg-orange-500 text-white rounded-xl py-3 font-semibold hover:bg-orange-600 transition shadow-md"
+                        >
+                          Interested
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-400 text-center mt-2">
+                        {vibeIndex + 1} / {rankedVenues.length}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center text-white/50 py-12">
+                    <p className="text-3xl mb-2">&#x2728;</p>
+                    <p>You&apos;ve seen all venues for this vibe!</p>
+                    <button
+                      onClick={() => {
+                        setVibeIndex(0);
+                        setOrchestratorResult(null);
+                        setVibeKeywords([]);
+                      }}
+                      className="mt-4 text-orange-300 font-medium hover:text-orange-200 transition"
+                    >
+                      Start fresh
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
-          {/* Venue cards from orchestrator */}
-          {rankedVenues.length > 0 && !vibeLoading && (
-            <div className="relative z-10 flex-shrink-0 mb-6">
-              {currentVenue ? (
-                <div className="max-w-lg mx-auto bg-white border border-gray-200 rounded-3xl p-6 shadow-lg text-black">
-                  <div className="flex items-start justify-between mb-2">
-                    <h2 className="text-2xl font-bold">{currentVenue.name}</h2>
-                    <span className="bg-orange-100 text-orange-600 text-sm font-bold px-3 py-1 rounded-full">
-                      {Math.round((currentVenue.score || 0) * 100)}%
-                    </span>
-                  </div>
-                  {currentVenue.address && (
-                    <p className="text-gray-500 text-sm mb-2">{currentVenue.address}</p>
-                  )}
-                  {currentVenue.explanation && (
-                    <p className="text-gray-600 text-sm mb-3">{currentVenue.explanation}</p>
-                  )}
-                  {currentVenue.categories && currentVenue.categories.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {currentVenue.categories.map((cat: string) => (
-                        <span key={cat} className="bg-orange-50 text-orange-600 text-xs font-semibold px-3 py-1 rounded-full">
-                          {cat}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {currentVenue.price_tier && (
-                    <p className="text-sm text-gray-400 mb-3">Price: {currentVenue.price_tier}</p>
-                  )}
-                  <div className="flex gap-4 mt-4">
-                    <button
-                      onClick={() => handleVibeSwipe(currentVenue, "pass")}
-                      className="flex-1 border-2 border-gray-300 rounded-xl py-3 font-semibold text-gray-500 hover:bg-gray-100 transition"
-                    >
-                      Pass
-                    </button>
-                    <button
-                      onClick={() => handleVibeSwipe(currentVenue, "interested")}
-                      className="flex-1 bg-orange-500 text-white rounded-xl py-3 font-semibold hover:bg-orange-600 transition"
-                    >
-                      Interested
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-400 text-center mt-2">
-                    {vibeIndex + 1} / {rankedVenues.length}
-                  </p>
-                </div>
-              ) : (
-                <div className="text-center text-white/50 mt-8">
-                  <p className="text-3xl mb-2">&#x2728;</p>
-                  <p>You&apos;ve seen all venues for this vibe!</p>
+          {/* Spacer */}
+          <div className="flex-1 min-h-4" />
+
+          {/* ── Bottom: Glowing suggestion bubbles ── */}
+          <div className="relative z-10 mb-4">
+            <div className="relative h-56 sm:h-64 flex items-center justify-center">
+              {/* Ambient glow behind bubbles */}
+              <div className="absolute inset-0 flex justify-center items-center pointer-events-none">
+                <div className="w-64 h-32 rounded-full bg-[radial-gradient(ellipse,_rgba(255,149,0,0.25)_0%,_rgba(89,135,255,0.18)_40%,_rgba(167,80,255,0.12)_70%,_transparent_100%)] blur-2xl animate-pulse-slow" />
+              </div>
+
+              {availableSuggestions.map((suggestion, i) => {
+                const total = availableSuggestions.length;
+                const angle = (2 * Math.PI * i) / Math.max(total, 1) - Math.PI / 2;
+                const ring = i < 8 ? 0 : 1;
+                const radius = ring === 0 ? 110 : 75;
+                const x = Math.cos(angle) * radius;
+                const y = Math.sin(angle) * radius;
+                const size = 60 + ((i * 7) % 24);
+                const duration = 4 + (i % 4);
+                const delay = (i % 5) * 0.4;
+                const hue = (i * 25) % 360;
+                return (
                   <button
-                    onClick={() => {
-                      setVibeIndex(0);
-                      setOrchestratorResult(null);
-                      setVibeKeywords([]);
+                    key={`sug-${suggestion}`}
+                    onClick={() => addKeyword(suggestion)}
+                    className="absolute z-10 rounded-full flex items-center justify-center text-center text-white/80 text-[11px] font-medium backdrop-blur-sm hover:text-white hover:scale-110 transition-all duration-300 animate-float bubble-glow"
+                    style={{
+                      width: `${size}px`,
+                      height: `${size}px`,
+                      left: `calc(50% + ${x}px - ${size / 2}px)`,
+                      top: `calc(50% + ${y}px - ${size / 2}px)`,
+                      animationDuration: `${duration}s`,
+                      animationDelay: `${delay}s`,
+                      background: `radial-gradient(circle at 35% 35%, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 50%, transparent 70%)`,
+                      border: `1px solid rgba(255,255,255,0.15)`,
+                      boxShadow: `0 0 12px 2px hsla(${hue}, 80%, 65%, 0.25), inset 0 0 8px rgba(255,255,255,0.06)`,
                     }}
-                    className="mt-4 text-orange-300 font-medium hover:text-orange-200 transition"
                   >
-                    Start fresh
+                    {suggestion}
                   </button>
-                </div>
-              )}
+                );
+              })}
+
+              {vibeKeywords.map((kw, i) => {
+                const angle = (2 * Math.PI * i) / Math.max(vibeKeywords.length, 1);
+                const radius = 40;
+                const x = Math.cos(angle) * radius;
+                const y = Math.sin(angle) * radius;
+                const duration = 5 + (i % 3);
+                return (
+                  <button
+                    key={kw}
+                    onClick={() => removeKeyword(kw)}
+                    className="absolute z-20 backdrop-blur-md text-white rounded-full px-4 py-2 text-sm font-semibold hover:bg-red-500/30 hover:border-red-400/50 transition-all duration-300 animate-float"
+                    style={{
+                      left: `calc(50% + ${x}px - 40px)`,
+                      top: `calc(50% + ${y}px - 16px)`,
+                      animationDuration: `${duration}s`,
+                      animationDelay: `${i * 0.2}s`,
+                      background: `rgba(255,149,0,0.2)`,
+                      border: `1px solid rgba(255,149,0,0.5)`,
+                      boxShadow: `0 0 18px 4px rgba(255,149,0,0.3), 0 0 6px 1px rgba(255,200,100,0.15)`,
+                    }}
+                    title="Click to remove"
+                  >
+                    {kw} <span className="ml-1 opacity-60">&times;</span>
+                  </button>
+                );
+              })}
             </div>
-          )}
+          </div>
 
-          {/* Spacer pushes input to bottom */}
-          <div className="flex-1" />
-
-          {/* Text input -- anchored at the bottom */}
+          {/* ── Bottom: keyword chips + text input ── */}
           <div className="max-w-md mx-auto w-full relative z-10 pb-4">
             {vibeKeywords.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-3">
                 {vibeKeywords.map((kw) => (
                   <span
                     key={`chip-${kw}`}
-                    className="inline-flex items-center gap-1 bg-white/10 border border-white/20 rounded-full px-3 py-1 text-xs text-white/80"
+                    className="inline-flex items-center gap-1 bg-orange-500/15 border border-orange-400/30 rounded-full px-3 py-1 text-xs text-orange-200"
                   >
                     {kw}
-                    <button onClick={() => removeKeyword(kw)} className="text-white/50 hover:text-red-400 transition">&times;</button>
+                    <button onClick={() => removeKeyword(kw)} className="text-orange-300/60 hover:text-red-400 transition">&times;</button>
                   </span>
                 ))}
               </div>
@@ -474,6 +547,13 @@ export default function SwipePage() {
           @keyframes floatY {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-10px); }
+          }
+          .bubble-glow {
+            animation: floatY var(--dur, 5s) ease-in-out infinite, bubbleGlow 3s ease-in-out infinite alternate;
+          }
+          @keyframes bubbleGlow {
+            0% { filter: brightness(0.9); }
+            100% { filter: brightness(1.2); }
           }
         `}</style>
       </div>
